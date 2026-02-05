@@ -1,0 +1,56 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v9.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v9.0": {
+      "WindBladeInspector.Web/1.0.0": {
+        "dependencies": {
+          "WindBladeInspector.Core": "1.0.0",
+          "WindBladeInspector.Infrastructure": "1.0.0"
+        },
+        "runtime": {
+          "WindBladeInspector.Web.dll": {}
+        }
+      },
+      "WindBladeInspector.Core/1.0.0": {
+        "runtime": {
+          "WindBladeInspector.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "WindBladeInspector.Infrastructure/1.0.0": {
+        "dependencies": {
+          "WindBladeInspector.Core": "1.0.0"
+        },
+        "runtime": {
+          "WindBladeInspector.Infrastructure.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "WindBladeInspector.Web/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "WindBladeInspector.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "WindBladeInspector.Infrastructure/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
