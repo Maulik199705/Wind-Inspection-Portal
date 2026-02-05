@@ -1,0 +1,101 @@
+﻿@page "/"
+@using WindBladeInspector.Core.Services
+@using WindBladeInspector.Core.Entities
+@inject DashboardService DashboardService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>New Inspection - AeroEdge</PageTitle>
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            
+            <div class="text-center mb-5">
+                <h1>AeroEdge Inspector</h1>
+                <p class="text-muted">Start a new blade inspection</p>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h4 class="card-title mb-4">Project Details</h4>
+
+                    <EditForm Model="@_inputModel" OnValidSubmit="HandleSubmit">
+                        <DataAnnotationsValidator />
+
+                        <div class="mb-3">
+                            <label class="form-label">Park Name</label>
+                            <InputText @bind-Value="_inputModel.ParkName" class="form-control" placeholder="e.g. North Sea Farm" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Turbine ID</label>
+                            <InputText @bind-Value="_inputModel.TurbineId" class="form-control" placeholder="e.g. T-104" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Turbine Model</label>
+                            <InputText @bind-Value="_inputModel.Model" class="form-control" placeholder="e.g. Vestas V112" />
+                        </div>
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                Create & Start Inspection
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+
+            <!-- Optional: List existing active sessions if any -->
+            @if (DashboardService.GetAllProjects().Any())
+            {
+                <div class="mt-5">
+                    <h5 class="text-muted mb-3">Active Sessions</h5>
+                    <div class="list-group">
+                        @foreach (var p in DashboardService.GetAllProjects())
+                        {
+                            <a href="/inspection/@p.Id" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>@p.TurbineId</strong> - @p.ParkName
+                                    <div class="small text-muted">@p.InspectionDate.ToShortDateString()</div>
+                                </div>
+                                <span class="badge bg-secondary">Resume</span>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+
+        </div>
+    </div>
+</div>
+
+@code {
+    private ProjectInputModel _inputModel = new();
+
+    private void HandleSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_inputModel.ParkName) || string.IsNullOrWhiteSpace(_inputModel.TurbineId))
+        {
+            return;
+        }
+
+        var newProject = DashboardService.CreateProject(
+            _inputModel.ParkName, 
+            _inputModel.TurbineId, 
+            _inputModel.Model
+        );
+
+        // Navigate to the inspection page for this specific project
+        Navigation.NavigateTo($"/inspection/{newProject.Id}");
+    }
+
+    // Simple nested class for the form
+    class ProjectInputModel
+    {
+        public string ParkName { get; set; } = "";
+        public string TurbineId { get; set; } = "";
+        public string Model { get; set; } = "";
+    }
+}
