@@ -30,6 +30,7 @@ window.inspectionCanvas = (function () {
     let scale = 1.0;
     let panX = 0, panY = 0;
     let lastPanX = 0, lastPanY = 0;
+    let minScale = 0.25; // Minimum scale - updated on setup to initial fit
 
     // Stored drawings
     let calibrationLine = null;
@@ -77,6 +78,8 @@ window.inspectionCanvas = (function () {
         canvas.width = imageEl.naturalWidth;
         canvas.height = imageEl.naturalHeight;
         resetView(); // Use shared logic for initial fit
+        minScale = scale; // Store the initial fit as minimum zoom
+        console.log(`Canvas setup complete. Image: ${canvas.width}x${canvas.height}, Initial scale: ${minScale.toFixed(3)}`);
     }
 
     /**
@@ -101,12 +104,16 @@ window.inspectionCanvas = (function () {
     }
 
     /**
-     * Zoom handler via mouse wheel.
+     * Zoom handler via mouse wheel with smart zoom-to-cursor and minimum constraint.
      */
     function onWheel(e) {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        const newScale = Math.max(0.25, Math.min(scale + delta, 10.0)); // Increase max zoom
+
+        // Prevent zooming out below initial fit (minScale)
+        const newScale = Math.max(minScale, Math.min(scale + delta, 10.0));
+
+        if (newScale === scale) return; // No change
 
         // Zoom towards cursor position
         const rect = containerEl.getBoundingClientRect();
@@ -119,12 +126,35 @@ window.inspectionCanvas = (function () {
         panY = mouseY - (mouseY - panY) * scaleFactor;
 
         scale = newScale;
+        constrainPan(); // Apply pan constraints
         applyTransform();
 
         // Notify C# of zoom change
         if (dotNetRef) {
             dotNetRef.invokeMethodAsync('ReceiveZoomChange', scale);
         }
+    }
+
+    /**
+     * Constrain pan so image never goes completely off-screen.
+     * Allows dragging up to 80% of image off each edge.
+     */
+    function constrainPan() {
+        if (!canvas || !containerEl) return;
+
+        const containerRect = containerEl.getBoundingClientRect();
+        const containerW = containerRect.width;
+        const containerH = containerRect.height;
+        const scaledW = canvas.width * scale;
+        const scaledH = canvas.height * scale;
+
+        // Allow dragging up to 80% of image off each edge
+        const maxOffsetX = scaledW * 0.8;
+        const maxOffsetY = scaledH * 0.8;
+
+        // Constrain panX: right edge max, left edge min
+        panX = Math.min(maxOffsetX, Math.max(containerW - scaledW - maxOffsetX, panX));
+        panY = Math.min(maxOffsetY, Math.max(containerH - scaledH - maxOffsetY, panY));
     }
 
     function applyTransform() {
@@ -138,7 +168,8 @@ window.inspectionCanvas = (function () {
      * Set zoom level programmatically.
      */
     function setZoom(newScale) {
-        scale = Math.max(0.25, Math.min(newScale, 5.0));
+        scale = Math.max(minScale, Math.min(newScale, 10.0));
+        constrainPan();
         applyTransform();
     }
 
@@ -168,11 +199,8 @@ window.inspectionCanvas = (function () {
         const scaleY = containerH / imgH;
         // Use the smaller scale so the whole image fits
         let fitScale = Math.min(scaleX, scaleY);
-        
-        // Cap the max initial scale to 1.0 (actual size) if image is smaller than screen
-        // or remove this line if you want small images to stretch
-        fitScale = Math.min(fitScale, 1.0) * 0.9; // 0.9 provides a small padding margin
 
+        // Remove padding - fill the entire space
         scale = fitScale;
 
         // Calculate centered position
@@ -222,6 +250,7 @@ window.inspectionCanvas = (function () {
         if (isPanning) {
             panX = e.clientX - lastPanX;
             panY = e.clientY - lastPanY;
+            constrainPan(); // Apply constraints during panning
             applyTransform();
             return;
         }
