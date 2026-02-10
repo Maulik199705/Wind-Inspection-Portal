@@ -430,9 +430,32 @@ window.inspectionCanvas = (function () {
         anomalyBoxes = boxes || [];
         redraw();
     }
+    /**
+ * Remove the box at a specific index (for syncing with Blazor)
+ */
+    function removeBoxByIndex(index) {
+        if (index >= 0 && index < anomalyBoxes.length) {
+            anomalyBoxes.splice(index, 1);
+            redraw();
+            return true;
+        }
+        return false;
+    }
 
     function getAnomalyCount() {
         return anomalyBoxes.length;
+    }
+
+    /**
+ * Clear all boxes immediately (used when canceling)
+ */
+    function clearLastDrawnBox() {
+        if (anomalyBoxes.length > 0) {
+            anomalyBoxes.pop();
+            redraw();
+            return true;
+        }
+        return false;
     }
 
     // Public API
@@ -445,7 +468,9 @@ window.inspectionCanvas = (function () {
         clearAll,
         undoLastBox,
         loadAnomalies,
-        getAnomalyCount
+        getAnomalyCount,
+        removeBoxByIndex,   
+        clearLastDrawnBox 
     };
 })();
 

@@ -681,37 +681,42 @@
         }
 
         [JSInvokable]
-        public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
-        {
-            Logger.LogInformation("Defect box drawn: {Width}x{Height} px at ({X}, {Y})", width, height, x, y);
-            
-            // Store dimensions for display
-            _currentDefectWidthPx = width;
-            _currentDefectHeightPx = height;
-            _currentDefectWidthPct = (width / refWidth) * 100;
-            _currentDefectHeightPct = (height / refHeight) * 100;
-            
-            _currentAnomaly = new Anomaly
-            {
-                AnomalyId = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
-                RadiusMeters = _selectedImage?.PositionMeters ?? 0, 
-                BladeSide = _selectedView ?? "PS",
-                AreaCm2 = (width * height) / 10000,
-                WidthCm = (width / refWidth) * 100,
-                Coordinates = new ImageCoordinates 
-                { 
-                    X = x, 
-                    Y = y, 
-                    Width = width, 
-                    Height = height,
-                    ReferenceWidth = refWidth,
-                    ReferenceHeight = refHeight
-                }
-            };
-            
-            // No popup - form appears in sidebar
-            StateHasChanged();
+public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
+{
+    Logger.LogInformation("Defect box drawn: {Width}x{Height} px at ({X}, {Y})", width, height, x, y);
+    
+    // Store dimensions for display
+    _currentDefectWidthPx = width;
+    _currentDefectHeightPx = height;
+    _currentDefectWidthPct = (width / refWidth) * 100;
+    _currentDefectHeightPct = (height / refHeight) * 100;
+    
+    // Track the current canvas anomaly index
+    _currentCanvasBoxIndex = _selectedImage?.Anomalies.Count ?? 0;
+    
+    _currentAnomaly = new Anomaly
+    {
+        AnomalyId = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
+        RadiusMeters = _selectedImage?.PositionMeters ?? 0, 
+        BladeSide = _selectedView ?? "PS",
+        AreaCm2 = (width * height) / 10000,
+        WidthCm = (width / refWidth) * 100,
+        Coordinates = new ImageCoordinates 
+        { 
+            X = x, 
+            Y = y, 
+            Width = width, 
+            Height = height,
+            ReferenceWidth = refWidth,
+            ReferenceHeight = refHeight
         }
+    };
+    
+    StateHasChanged();
+}
+
+// Add this field to track canvas box index
+private int _currentCanvasBoxIndex = -1;
 
         [JSInvokable]
         public void ReceiveZoomChange(double newZoom)
@@ -758,29 +763,46 @@
         //     StateHasChanged();
         // }
 
-                    private async Task CancelDefect()
-              {
-                  try
-                {
-                  Logger.LogInformation("Defect canceled - removing last box");
-                 _currentAnomaly = null;
-            
-                 if (_isCanvasInitialized)
-                  {
-                  // Safely invoke the JavaScript function with error handling
-                  await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
-                  }
-                }
-             catch (Exception ex)
-             {
-              Logger.LogError(ex, "Error occurred while canceling the defect.");
-             }
-             finally
-             {
-              // Ensure the UI is updated even if an error occurs
-              StateHasChanged();
-             }
+        private async Task CancelDefect()
+{
+    try
+    {
+        Logger.LogInformation("Defect canceled - removing box at index {Index}", _currentCanvasBoxIndex);
+        
+        // Remove the box from canvas by index
+        if (_isCanvasInitialized && _currentCanvasBoxIndex >= 0)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeBoxByIndex", _currentCanvasBoxIndex);
             }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Could not remove box by index, trying removeLastBox");
+                // Fallback to removing last box
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
+            }
+        }
+        
+        // Clear state
+        _currentAnomaly = null;
+        _currentCanvasBoxIndex = -1;
+        _currentDefectWidthPx = 0;
+        _currentDefectHeightPx = 0;
+        _currentDefectWidthPct = 0;
+        _currentDefectHeightPct = 0;
+    }
+    catch (Exception ex)
+    {
+        Logger.LogError(ex, "Error occurred while canceling the defect.");
+    }
+    finally
+    {
+        StateHasChanged();
+    }
+}
+
+          
         private async Task ZoomIn()
         {
             _zoomLevel = Math.Min(_zoomLevel + 0.25, 3.0);
