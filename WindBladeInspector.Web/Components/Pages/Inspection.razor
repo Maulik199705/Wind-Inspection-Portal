@@ -747,16 +747,40 @@
             }
         }
 
-        private async Task CancelDefect()
-        {
-            Logger.LogInformation("Defect canceled - removing last box");
-            _currentAnomaly = null;
-            if (_isCanvasInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
+        // private async Task CancelDefect()
+        // {
+        //     Logger.LogInformation("Defect canceled - removing last box");
+        //     _currentAnomaly = null;
+        //     if (_isCanvasInitialized)
+        //     {
+        //         await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
+        //     }
+        //     StateHasChanged();
+        // }
+
+                    private async Task CancelDefect()
+              {
+                  try
+                {
+                  Logger.LogInformation("Defect canceled - removing last box");
+                 _currentAnomaly = null;
+            
+                 if (_isCanvasInitialized)
+                  {
+                  // Safely invoke the JavaScript function with error handling
+                  await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
+                  }
+                }
+             catch (Exception ex)
+             {
+              Logger.LogError(ex, "Error occurred while canceling the defect.");
+             }
+             finally
+             {
+              // Ensure the UI is updated even if an error occurs
+              StateHasChanged();
+             }
             }
-            StateHasChanged();
-        }
         private async Task ZoomIn()
         {
             _zoomLevel = Math.Min(_zoomLevel + 0.25, 3.0);
