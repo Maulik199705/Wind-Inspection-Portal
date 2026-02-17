@@ -1,0 +1,342 @@
+@using WindBladeInspector.Core.Entities
+@using WindBladeInspector.Core.Enums
+@using WindBladeInspector.Core.Services
+@inject DefectClassificationBuilderService BuilderService
+@inject DefectClassificationValidator Validator
+@inject ILogger<DefectClassificationSelector> Logger
+
+<div class="defect-classification-selector">
+    <!-- Category Selection -->
+    <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-select" @bind="SelectedCategory" @bind:after="OnCategoryChanged">
+            @foreach (var category in BuilderService.GetCategories())
+            {
+                <option value="@category.Key">@category.Value</option>
+            }
+        </select>
+    </div>
+
+    <!-- Blade Material (if Blade category) -->
+    @if (SelectedCategory == ComponentCategory.Blade)
+    {
+        <div class="form-group">
+            <label class="form-label">Material</label>
+            <select class="form-select" @bind="SelectedBladeMaterial" @bind:after="OnBladeMaterialChanged">
+                <option value="">-- Select Material --</option>
+                @foreach (var material in BuilderService.GetBladeMaterials())
+                {
+                    <option value="@material.Key">@material.Value</option>
+                }
+            </select>
+        </div>
+
+        @if (SelectedBladeMaterial.HasValue)
+        {
+            <!-- Defect Type for Blade -->
+            <div class="form-group">
+                <label class="form-label">Defect Type</label>
+                <select class="form-select" @bind="SelectedDefectType" @bind:after="OnDefectTypeChanged">
+                    <option value="">-- Select Defect Type --</option>
+                    @foreach (var defectType in AvailableDefectTypes)
+                    {
+                        <option value="@defectType.Key">@defectType.Value</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Defect Subtype (if applicable) -->
+            @if (AvailableSubtypes != null && AvailableSubtypes.Any())
+            {
+                <div class="form-group">
+                    <label class="form-label">Defect Subtype (Optional)</label>
+                    <select class="form-select" @bind="SelectedDefectSubtype">
+                        <option value="">-- Select Subtype (Optional) --</option>
+                        @foreach (var subtype in AvailableSubtypes)
+                        {
+                            <option value="@subtype.Key">@subtype.Value</option>
+                        }
+                    </select>
+                </div>
+            }
+        }
+    }
+
+    <!-- Auxiliary Component (if AuxiliaryComponent category) -->
+    @if (SelectedCategory == ComponentCategory.AuxiliaryComponent)
+    {
+        <div class="form-group">
+            <label class="form-label">Component</label>
+            <select class="form-select" @bind="SelectedAuxiliaryComponent" @bind:after="OnAuxiliaryComponentChanged">
+                <option value="">-- Select Component --</option>
+                @foreach (var component in BuilderService.GetAuxiliaryComponents())
+                {
+                    <option value="@component.Key">@component.Value</option>
+                }
+            </select>
+        </div>
+
+        @if (SelectedAuxiliaryComponent.HasValue)
+        {
+            <!-- Defect Type for Auxiliary Component -->
+            <div class="form-group">
+                <label class="form-label">Defect Type</label>
+                <select class="form-select" @bind="SelectedDefectType">
+                    <option value="">-- Select Defect Type --</option>
+                    @foreach (var defectType in AvailableDefectTypes)
+                    {
+                        <option value="@defectType.Key">@defectType.Value</option>
+                    }
+                </select>
+            </div>
+        }
+    }
+
+    <!-- Classification Preview -->
+    @if (!string.IsNullOrEmpty(GetClassificationPreview()))
+    {
+        <div class="classification-preview">
+            <label class="form-label">Classification Preview:</label>
+            <div class="preview-path">@GetClassificationPreview()</div>
+        </div>
+    }
+
+    <!-- Validation Errors -->
+    @if (ValidationErrors.Any())
+    {
+        <div class="validation-errors">
+            @foreach (var error in ValidationErrors)
+            {
+                <div class="error-message">?? @error</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public DefectClassification? Classification { get; set; }
+
+    [Parameter]
+    public EventCallback<DefectClassification?> ClassificationChanged { get; set; }
+
+    private ComponentCategory SelectedCategory { get; set; } = ComponentCategory.Blade;
+    private BladeMaterial? SelectedBladeMaterial { get; set; }
+    private AuxiliaryComponent? SelectedAuxiliaryComponent { get; set; }
+    private int? SelectedDefectType { get; set; }
+    private int? SelectedDefectSubtype { get; set; }
+
+    private Dictionary<int, string> AvailableDefectTypes { get; set; } = new();
+    private Dictionary<int, string>? AvailableSubtypes { get; set; }
+    private List<string> ValidationErrors { get; set; } = new();
+
+    protected override void OnParametersSet()
+    {
+        if (Classification != null)
+        {
+            // Load existing classification
+            SelectedCategory = Classification.Category;
+            SelectedBladeMaterial = Classification.BladeMaterial;
+            SelectedAuxiliaryComponent = Classification.AuxiliaryComponentType;
+            SelectedDefectType = Classification.DefectType;
+            SelectedDefectSubtype = Classification.DefectSubtype;
+
+            UpdateAvailableOptions();
+        }
+    }
+
+    private void OnCategoryChanged()
+    {
+        // Reset dependent fields
+        SelectedBladeMaterial = null;
+        SelectedAuxiliaryComponent = null;
+        SelectedDefectType = null;
+        SelectedDefectSubtype = null;
+        AvailableDefectTypes = new();
+        AvailableSubtypes = null;
+        UpdateClassification();
+    }
+
+    private void OnBladeMaterialChanged()
+    {
+        SelectedDefectType = null;
+        SelectedDefectSubtype = null;
+        AvailableSubtypes = null;
+        UpdateAvailableOptions();
+        UpdateClassification();
+    }
+
+    private void OnAuxiliaryComponentChanged()
+    {
+        SelectedDefectType = null;
+        UpdateAvailableOptions();
+        UpdateClassification();
+    }
+
+    private void OnDefectTypeChanged()
+    {
+        SelectedDefectSubtype = null;
+        UpdateAvailableSubtypes();
+        UpdateClassification();
+    }
+
+    private void UpdateAvailableOptions()
+    {
+        if (SelectedCategory == ComponentCategory.Blade && SelectedBladeMaterial.HasValue)
+        {
+            AvailableDefectTypes = BuilderService.GetDefectTypesForBladeMaterial(SelectedBladeMaterial.Value);
+        }
+        else if (SelectedCategory == ComponentCategory.AuxiliaryComponent && SelectedAuxiliaryComponent.HasValue)
+        {
+            AvailableDefectTypes = BuilderService.GetDefectTypesForAuxiliaryComponent(SelectedAuxiliaryComponent.Value);
+        }
+        else
+        {
+            AvailableDefectTypes = new();
+        }
+    }
+
+    private void UpdateAvailableSubtypes()
+    {
+        if (SelectedCategory == ComponentCategory.Blade && 
+            SelectedBladeMaterial.HasValue && 
+            SelectedDefectType.HasValue)
+        {
+            AvailableSubtypes = BuilderService.GetSubtypesForDefect(SelectedBladeMaterial.Value, SelectedDefectType.Value);
+        }
+        else
+        {
+            AvailableSubtypes = null;
+        }
+    }
+
+    private void UpdateClassification()
+    {
+        ValidationErrors.Clear();
+
+        if (SelectedCategory == ComponentCategory.Blade)
+        {
+            if (!SelectedBladeMaterial.HasValue || !SelectedDefectType.HasValue)
+            {
+                // Incomplete classification
+                _ = ClassificationChanged.InvokeAsync(null);
+                return;
+            }
+
+            var classification = new DefectClassification
+            {
+                Category = SelectedCategory,
+                BladeMaterial = SelectedBladeMaterial.Value,
+                DefectType = SelectedDefectType.Value,
+                DefectSubtype = SelectedDefectSubtype
+            };
+
+            var validationResult = Validator.Validate(classification);
+            if (!validationResult.IsValid)
+            {
+                ValidationErrors = validationResult.Errors;
+                Logger.LogWarning("Invalid blade classification: {Errors}", string.Join(", ", validationResult.Errors));
+                _ = ClassificationChanged.InvokeAsync(null);
+                return;
+            }
+
+            _ = ClassificationChanged.InvokeAsync(classification);
+        }
+        else if (SelectedCategory == ComponentCategory.AuxiliaryComponent)
+        {
+            if (!SelectedAuxiliaryComponent.HasValue || !SelectedDefectType.HasValue)
+            {
+                // Incomplete classification
+                _ = ClassificationChanged.InvokeAsync(null);
+                return;
+            }
+
+            var classification = new DefectClassification
+            {
+                Category = SelectedCategory,
+                AuxiliaryComponentType = SelectedAuxiliaryComponent.Value,
+                DefectType = SelectedDefectType.Value,
+                DefectSubtype = null // Auxiliary components don't have subtypes
+            };
+
+            var validationResult = Validator.Validate(classification);
+            if (!validationResult.IsValid)
+            {
+                ValidationErrors = validationResult.Errors;
+                Logger.LogWarning("Invalid auxiliary component classification: {Errors}", string.Join(", ", validationResult.Errors));
+                _ = ClassificationChanged.InvokeAsync(null);
+                return;
+            }
+
+            _ = ClassificationChanged.InvokeAsync(classification);
+        }
+    }
+
+    private string GetClassificationPreview()
+    {
+        if (SelectedCategory == ComponentCategory.Blade && 
+            SelectedBladeMaterial.HasValue && 
+            SelectedDefectType.HasValue)
+        {
+            var classification = new DefectClassification
+            {
+                Category = SelectedCategory,
+                BladeMaterial = SelectedBladeMaterial.Value,
+                DefectType = SelectedDefectType.Value,
+                DefectSubtype = SelectedDefectSubtype
+            };
+            return classification.GetFullPath();
+        }
+        else if (SelectedCategory == ComponentCategory.AuxiliaryComponent && 
+                 SelectedAuxiliaryComponent.HasValue && 
+                 SelectedDefectType.HasValue)
+        {
+            var classification = new DefectClassification
+            {
+                Category = SelectedCategory,
+                AuxiliaryComponentType = SelectedAuxiliaryComponent.Value,
+                DefectType = SelectedDefectType.Value
+            };
+            return classification.GetFullPath();
+        }
+
+        return string.Empty;
+    }
+}
+
+<style>
+    .defect-classification-selector {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .classification-preview {
+        background: #1a1a1a;
+        padding: 10px;
+        border-radius: 4px;
+        border: 2px solid #0f0;
+        margin-top: 0.5rem;
+    }
+
+    .preview-path {
+        color: #0f0;
+        font-weight: bold;
+        font-size: 0.9rem;
+        margin-top: 5px;
+    }
+
+    .validation-errors {
+        background: #442222;
+        border: 1px solid #663333;
+        border-radius: 4px;
+        padding: 10px;
+        margin-top: 0.5rem;
+    }
+
+    .error-message {
+        color: #ff6666;
+        font-size: 0.85rem;
+        margin: 3px 0;
+    }
+</style>

@@ -43,6 +43,11 @@ builder.Services.AddScoped<InspectionCalculationService>();
 // Register inspection state
 builder.Services.AddScoped<InspectionState>();
 
+// Register defect classification services
+builder.Services.AddScoped<DefectClassificationValidator>();
+builder.Services.AddScoped<DefectMigrationService>();
+builder.Services.AddScoped<DefectClassificationBuilderService>();
+
 // Register infrastructure services
 builder.Services.AddScoped<IFileStorageService>(sp =>
     new LocalFileStorageService(builder.Environment.WebRootPath));

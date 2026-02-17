@@ -13,8 +13,17 @@ public class Anomaly
     /// <summary>Severity level (1-5): 1=Cosmetic, 5=Very Serious.</summary>
     public int Severity { get; set; } = 1;
     
-    /// <summary>Type of anomaly: Erosion, Crack, Pinholes, Peeling, Flaking, Discoloration, etc.</summary>
+    /// <summary>
+    /// [LEGACY] Type of anomaly: Erosion, Crack, Pinholes, Peeling, Flaking, Discoloration, etc.
+    /// Kept for backward compatibility. New code should use Classification property.
+    /// </summary>
     public string Type { get; set; } = "Other";
+    
+    /// <summary>
+    /// [NEW] Hierarchical defect classification following the standardized schema.
+    /// Blade > Material > DefectType > Subtype OR AuxiliaryComponent > Component > DefectType
+    /// </summary>
+    public DefectClassification? Classification { get; set; }
     
     /// <summary>Distance from blade root in meters (Radius).</summary>
     public double RadiusMeters { get; set; }
@@ -39,6 +48,18 @@ public class Anomaly
     
     /// <summary>Recommendation for this anomaly.</summary>
     public string Recommendation { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Gets the defect type string, prioritizing Classification over legacy Type.
+    /// </summary>
+    public string GetDefectTypeDisplay()
+    {
+        if (Classification != null)
+        {
+            return Classification.GetFullPath();
+        }
+        return Type;
+    }
 }
 
 /// <summary>

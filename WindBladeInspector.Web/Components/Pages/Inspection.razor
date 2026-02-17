@@ -36,6 +36,7 @@
 @using WindBladeInspector.Core.Entities
 @using WindBladeInspector.Core.Interfaces
 @using WindBladeInspector.Web.InspectionLogic
+@using WindBladeInspector.Web.Components.Inspection
 @using Microsoft.JSInterop
 @inject DashboardService DashboardService
 @inject InspectionCalculationService CalculationService
@@ -47,7 +48,7 @@
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
-<PageTitle>AeroEdge - Blade Inspection</PageTitle>
+<PageTitle>QualiMax - Blade Inspection</PageTitle>
 
 <div class="app-container @(State.IsVisualMode ? "visual-mode" : "")">
     <header class="app-header">
@@ -125,10 +126,11 @@
                         foreach (var anomaly in  State.SelectedBlade.Anomalies.OrderByDescending(a => a.Severity))
                         {
                              <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
-                                 @onclick="() => SelectAnomaly(anomaly)">
+                                 @onclick="() => SelectAnomaly(anomaly)"    
+                                 title="@anomaly.GetDefectTypeDisplay()">
                                 <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
                                 <div class="anomaly-list-info">
-                                    <div class="anomaly-list-type">@anomaly.Type</div>
+                                    <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
                                     <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
                                 </div>
                             </div>
@@ -305,19 +307,10 @@
                     </select>
                 </div>
                 
-                <div class="form-group">
-                    <label class="form-label">Type</label>
-                    <select class="form-select" @bind="State.CurrentAnomaly.Type">
-                        <option value="Erosion">Erosion</option>
-                        <option value="Crack">Crack</option>
-                        <option value="Pinholes">Pinholes</option>
-                        <option value="Peeling">Peeling</option>
-                        <option value="Flaking">Flaking</option>
-                        <option value="Discoloration">Discoloration</option>
-                        <option value="Damaged or Misaligned">Damaged or Misaligned</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
+                <!-- Replace simple dropdown with DefectClassificationSelector -->
+                <DefectClassificationSelector 
+                    Classification="@State.CurrentAnomaly.Classification" 
+                    ClassificationChanged="@OnCurrentDefectClassificationChanged" />
                 
                 <div class="form-group">
                     <label class="form-label">Blade Side</label>
@@ -381,19 +374,10 @@
                         </select>
                     </div>
                     
-                    <div class="form-group">
-                        <label class="form-label">Type</label>
-                        <select class="form-select" @bind="State.SelectedAnomaly.Type">
-                            <option value="Erosion">Erosion</option>
-                            <option value="Crack">Crack</option>
-                            <option value="Pinholes">Pinholes</option>
-                            <option value="Peeling">Peeling</option>
-                            <option value="Flaking">Flaking</option>
-                            <option value="Discoloration">Discoloration</option>
-                            <option value="Damaged or Misaligned">Damaged or Misaligned</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
+                    <!-- Replace simple dropdown with DefectClassificationSelector -->
+                    <DefectClassificationSelector 
+                        Classification="@State.SelectedAnomaly.Classification" 
+                        ClassificationChanged="@OnSelectedDefectClassificationChanged" />
                     
                     <div class="form-group">
                         <label class="form-label">Blade Side</label>
@@ -798,11 +782,65 @@
             "TE" => "Trailing Edge",
             _ => side
         };
+
+        private string GetShortDefectDisplay(Anomaly anomaly)
+        {
+            // For sidebar list, show shortened version
+            if (anomaly.Classification != null)
+            {
+                var defectType = anomaly.Classification.GetDefectTypeString();
+                var subtype = anomaly.Classification.GetDefectSubtypeString();
+                
+                if (!string.IsNullOrEmpty(subtype) && subtype != "None")
+                {
+                    return $"{defectType} - {subtype}";
+                }
+                return defectType;
+            }
+            
+            return anomaly.Type; // Fallback to legacy
+        }
         
         private void SelectAnomaly(Anomaly anomaly)
         {
             State.SelectedAnomaly = anomaly;
             StateHasChanged();
+        }
+
+        private void OnCurrentDefectClassificationChanged(DefectClassification? classification)
+        {
+            if (State.CurrentAnomaly != null)
+            {
+                State.CurrentAnomaly.Classification = classification;
+                
+                // Update legacy Type field for backward compatibility
+                if (classification != null)
+                {
+                    State.CurrentAnomaly.Type = classification.GetDefectTypeString();
+                }
+                
+                Logger.LogInformation("Current defect classification updated: {Classification}", 
+                    classification?.GetFullPath() ?? "None");
+                StateHasChanged();
+            }
+        }
+
+        private void OnSelectedDefectClassificationChanged(DefectClassification? classification)
+        {
+            if (State.SelectedAnomaly != null)
+            {
+                State.SelectedAnomaly.Classification = classification;
+                
+                // Update legacy Type field for backward compatibility
+                if (classification != null)
+                {
+                    State.SelectedAnomaly.Type = classification.GetDefectTypeString();
+                }
+                
+                Logger.LogInformation("Selected defect classification updated: {Classification}", 
+                    classification?.GetFullPath() ?? "None");
+                StateHasChanged();
+            }
         }
 
         private async Task OnImageLoaded()
@@ -850,6 +888,8 @@
                 BladeSide = State.SelectedView ?? "PS",
                 AreaCm2 = (width * height) / 10000,
                 WidthCm = (width / refWidth) * 100,
+                Type = "Other", // Default legacy type
+                Classification = null, // User must select classification
                 Coordinates = new ImageCoordinates 
                 { 
                     X = x, 
@@ -887,13 +927,25 @@
         {
             if (State.CurrentAnomaly != null &&  State.SelectedBlade != null)
             {
+                // Validate that classification is set
+                if (State.CurrentAnomaly.Classification == null)
+                {
+                    Logger.LogWarning("Attempted to save defect without classification");
+                    // Could add UI feedback here
+                    return;
+                }
+
                 if (string.IsNullOrEmpty(State.CurrentAnomaly.BladeSide) || State.CurrentAnomaly.BladeSide == "Unknown")
                 {
                     State.CurrentAnomaly.BladeSide = State.SelectedView;
                 }
 
-                Logger.LogInformation("Defect saved: Type={Type}, Severity={Severity}, Side={Side}, Blade={Blade}",
-                    State.CurrentAnomaly.Type, State.CurrentAnomaly.Severity, State.CurrentAnomaly.BladeSide,  State.SelectedBlade.SerialNumber);
+                Logger.LogInformation("Defect saved: Type={Type}, Classification={Classification}, Severity={Severity}, Side={Side}, Blade={Blade}",
+                    State.CurrentAnomaly.Type, 
+                    State.CurrentAnomaly.Classification?.GetFullPath(), 
+                    State.CurrentAnomaly.Severity, 
+                    State.CurrentAnomaly.BladeSide,  
+                    State.SelectedBlade.SerialNumber);
 
                  State.SelectedBlade.Anomalies.Add(State.CurrentAnomaly);
                 
@@ -1131,7 +1183,7 @@
             sb.Append($"<p><strong>Total Defects Found:</strong> { State.SelectedBlade.Anomalies.Count}</p>");
             
             sb.Append("<h2>📊 Executive Summary</h2>");
-            sb.Append("<table class='summary-table'><thead><tr><th>#</th><th>Severity</th><th>Type</th><th>Side</th><th>Dimensions (px)</th><th>Area (px²)</th></tr></thead><tbody>");
+            sb.Append("<table class='summary-table'><thead><tr><th>#</th><th>Severity</th><th>Classification</th><th>Side</th><th>Dimensions (px)</th><th>Area (px²)</th></tr></thead><tbody>");
             
             int summaryIndex = 1;
             foreach(var a in  State.SelectedBlade.Anomalies.OrderByDescending(x => x.Severity))
@@ -1140,7 +1192,11 @@
                 sb.Append($"<tr class='severity-{a.Severity}'>");
                 sb.Append($"<td>{summaryIndex++}</td>");
                 sb.Append($"<td><strong>{a.Severity}</strong></td>");
-                sb.Append($"<td>{a.Type}</td>");
+                
+                // Use new classification display
+                var defectDisplay = a.GetDefectTypeDisplay();
+                sb.Append($"<td>{defectDisplay}</td>");
+                
                 sb.Append($"<td>{a.BladeSide}</td>");
                 sb.Append($"<td>{a.Coordinates?.Width:F0} × {a.Coordinates?.Height:F0}</td>");
                 sb.Append($"<td>{areaPixels:N0}</td>");
@@ -1179,7 +1235,10 @@
                 if (coords == null || coords.ReferenceWidth == 0 || coords.ReferenceHeight == 0) continue;
                 
                 sb.Append("<div class='defect-entry'>");
-                sb.Append($"<div class='defect-header'><h4>Defect #{defectData.DefectNumber}: {defect.Type} (Severity {defect.Severity})</h4></div>");
+                
+                // Use new classification display in header
+                var defectTypeDisplay = defect.GetDefectTypeDisplay();
+                sb.Append($"<div class='defect-header'><h4>Defect #{defectData.DefectNumber}: {defectTypeDisplay} (Severity {defect.Severity})</h4></div>");
                 
                 var areaPixels = coords.Width * coords.Height;
                 var totalImageArea = coords.ReferenceWidth * coords.ReferenceHeight;
@@ -1215,7 +1274,10 @@
                 sb.Append("<table class='defect-details'>");
                 sb.Append($"<tr><td>📍 Location</td><td>{defectData.View} - {GetViewLabel(defectData.View)}</td></tr>");
                 sb.Append($"<tr><td>⚠️ Severity Level</td><td><strong>Level {defect.Severity}</strong></td></tr>");
-                sb.Append($"<tr><td>🏷️ Defect Type</td><td>{defect.Type}</td></tr>");
+                
+                // Use full classification path
+                sb.Append($"<tr><td>🏷️ Defect Classification</td><td>{defectTypeDisplay}</td></tr>");
+                
                 sb.Append($"<tr><td>📏 Dimensions</td><td>{coords.Width:F1} × {coords.Height:F1} pixels</td></tr>");
                 sb.Append($"<tr><td>📐 Area (Pixels)</td><td><strong>{areaPixels:N0} px²</strong></td></tr>");
                 sb.Append($"<tr><td>📊 Area (% of Image)</td><td>{areaPercentage:F3}%</td></tr>");

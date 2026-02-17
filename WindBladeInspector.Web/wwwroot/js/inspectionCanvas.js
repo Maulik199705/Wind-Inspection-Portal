@@ -1,5 +1,5 @@
 /**
- * AeroEdge Blade Inspection Canvas
+ * QualiMax Blade Inspection Canvas
  * Vanilla JavaScript for handling canvas operations with zoom/pan/draw functionality.
  * 
  * Key Features:
@@ -70,7 +70,7 @@ window.inspectionCanvas = (function () {
         // Context menu prevention
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        console.log('AeroEdge Canvas initialized');
+        console.log('QualiMax Canvas initialized');
         return true;
     }
 
