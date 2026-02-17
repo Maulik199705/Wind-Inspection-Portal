@@ -1,0 +1,10 @@
+FEATURES/ENHANCEMENTS 
+
+1. no popup fixed button for the defects 
+2. error on images drawdown defects missing (BUG)
+3, defect not deleted after adding and saved 
+3. No magniified view only thr slighlty maginified no 2 only 1 images 
+4. modification reports as well 
+5. photos on left rather wanted on top as a number only 
+6. log in and sign in option as well 
+7, database schema where does stored projects live it should show up when we save any projects nex time and progress should be saved automatically 

@@ -2,6 +2,7 @@ using WindBladeInspector.Web.Components;
 using WindBladeInspector.Core.Interfaces;
 using WindBladeInspector.Core.Services;
 using WindBladeInspector.Infrastructure;
+using WindBladeInspector.Web.InspectionLogic;
 using Serilog;
 using Serilog.Events;
 
@@ -38,6 +39,9 @@ builder.Services.AddRazorComponents()
 // CHANGED: Use Singleton to keep data alive in memory while app runs
 builder.Services.AddSingleton<DashboardService>();
 builder.Services.AddScoped<InspectionCalculationService>();
+
+// Register inspection state
+builder.Services.AddScoped<InspectionState>();
 
 // Register infrastructure services
 builder.Services.AddScoped<IFileStorageService>(sp =>
