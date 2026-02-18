@@ -880,14 +880,16 @@
             State.CurrentWidthPct= (width / refWidth) * 100;
             State.CurrentHeightPct = (height / refHeight) * 100;
             State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+            double widthCm = (width / refWidth) * 100;
+            double heightCm = (height / refHeight) * 100;
             
             State.CurrentAnomaly = new Anomaly
             {
                 AnomalyId = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
                 RadiusMeters = State.SelectedImage?.PositionMeters ?? 0, 
                 BladeSide = State.SelectedView ?? "PS",
-                AreaCm2 = (width * height) / 10000,
-                WidthCm = (width / refWidth) * 100,
+                AreaCm2 = (widthCm * heightCm),
+                WidthCm = widthCm,
                 Type = "Other", // Default legacy type
                 Classification = null, // User must select classification
                 Coordinates = new ImageCoordinates 
@@ -1008,10 +1010,12 @@
 
         private async Task ZoomOut()
         {
-            State.ZoomLevel = Math.Max(State.ZoomLevel - 0.25, 0.25);
+            Logger.LogInformation("Zooming out. Current ZoomLevel: {ZoomLevel}", State.ZoomLevel);
+            State.ZoomLevel = Math.Max(State.ZoomLevel - 0.05, 0.1); // Adjust minimum zoom level if needed
+            Logger.LogInformation("New ZoomLevel after zooming out: {ZoomLevel}", State.ZoomLevel);
             if (State.IsCanvasInitialized)
             {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.setZoom", State.ZoomLevel);
+             await JSRuntime.InvokeVoidAsync("inspectionCanvas.setZoom", State.ZoomLevel);
             }
             StateHasChanged();
         }
@@ -1279,7 +1283,9 @@
                 sb.Append($"<tr><td>🏷️ Defect Classification</td><td>{defectTypeDisplay}</td></tr>");
                 
                 sb.Append($"<tr><td>📏 Dimensions</td><td>{coords.Width:F1} × {coords.Height:F1} pixels</td></tr>");
-                sb.Append($"<tr><td>📐 Area (Pixels)</td><td><strong>{areaPixels:N0} px²</strong></td></tr>");
+                //sb.Append($"<tr><td>📐 Area (Pixels)</td><td><strong>{areaPixels:N0} px²</strong></td></tr>");
+                var areaCm2 = defect.AreaCm2;
+                sb.Append($"<tr><td>📏 Area (cm²)</td><td><strong>{areaCm2:F2} cm²</strong></td></tr>");
                 sb.Append($"<tr><td>📊 Area (% of Image)</td><td>{areaPercentage:F3}%</td></tr>");
                 sb.Append($"<tr><td>🔍 Magnification</td><td>{magFactor:F1}x</td></tr>");
                 

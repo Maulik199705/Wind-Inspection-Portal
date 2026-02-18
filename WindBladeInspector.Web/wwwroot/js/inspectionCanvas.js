@@ -111,7 +111,7 @@ window.inspectionCanvas = (function () {
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
 
         // Prevent zooming out below initial fit (minScale)
-        const newScale = Math.max(minScale, Math.min(scale + delta, 10.0));
+        const newScale = Math.max(0.1, Math.min(scale + delta, 10.0));
 
         if (newScale === scale) return; // No change
 
@@ -168,7 +168,7 @@ window.inspectionCanvas = (function () {
      * Set zoom level programmatically.
      */
     function setZoom(newScale) {
-        scale = Math.max(minScale, Math.min(newScale, 10.0));
+        scale = Math.max(0.1, Math.min(newScale, 10.0));
         constrainPan();
         applyTransform();
     }
@@ -484,3 +484,4 @@ window.constWindowOpen = function (htmlContent) {
         alert("Please allow popups to view the report.");
     }
 };
+
