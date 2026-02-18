@@ -6,7 +6,7 @@
  * - Zoom via mouse wheel with CSS transform
  * - Pan via click-and-drag
  * - Calibration mode: draws blue line (Root → Tip)
- * - Inspection mode: draws red annotation boxes
+ * - Inspection mode: draws red annotation quadrilaterals (4-point polygons)
  * - Interop with Blazor via invokeMethodAsync
  */
 window.inspectionCanvas = (function () {
@@ -22,9 +22,11 @@ window.inspectionCanvas = (function () {
     let isDrawing = false;
     let isPanning = false;
 
-    // Coordinates
+    // Coordinates for 4-point drawing
     let startX = 0, startY = 0;
     let currentX = 0, currentY = 0;
+    let polygonPoints = []; // Array of {x, y} for multi-point drawing
+    let drawingPolygon = false; // True when in 4-point mode
 
     // Pan/Zoom state
     let scale = 1.0;
@@ -35,7 +37,7 @@ window.inspectionCanvas = (function () {
     // Stored drawings
     let calibrationLine = null;
     let rootPoint = null;
-    let anomalyBoxes = [];
+    let anomalyBoxes = []; // Now stores polygons with 4 points
 
     /**
      * Initialize the canvas with element IDs and .NET reference.
@@ -70,7 +72,7 @@ window.inspectionCanvas = (function () {
         // Context menu prevention
         canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        console.log('QualiMax Canvas initialized');
+        console.log('QualiMax Canvas initialized with 4-point polygon support');
         return true;
     }
 
@@ -93,7 +95,7 @@ window.inspectionCanvas = (function () {
     function updateCursor() {
         switch (mode) {
             case 'inspect':
-                canvas.style.cursor = 'crosshair';
+                canvas.style.cursor = drawingPolygon ? 'crosshair' : 'crosshair';
                 break;
             case 'pan':
                 canvas.style.cursor = isPanning ? 'grabbing' : 'grab';
@@ -230,8 +232,6 @@ window.inspectionCanvas = (function () {
     function onMouseDown(e) {
         e.preventDefault();
         const pos = getMousePos(e);
-        startX = pos.x;
-        startY = pos.y;
 
         if (mode === 'pan' || e.button === 1 || (e.button === 0 && e.altKey)) {
             // Middle mouse or Alt+Click = Pan
@@ -239,7 +239,24 @@ window.inspectionCanvas = (function () {
             lastPanX = e.clientX - panX;
             lastPanY = e.clientY - panY;
             canvas.style.cursor = 'grabbing';
-        } else {
+        } else if (mode === 'inspect') {
+            // 4-point polygon drawing
+            polygonPoints.push({ x: pos.x, y: pos.y });
+            drawingPolygon = true;
+
+            console.log(`Point ${polygonPoints.length} added at (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
+
+            if (polygonPoints.length === 4) {
+                // Complete the polygon
+                handleInspectionEnd();
+            } else {
+                // Redraw to show current points
+                redraw();
+                drawPolygonPreview();
+            }
+        } else if (mode === 'calibrate') {
+            startX = pos.x;
+            startY = pos.y;
             isDrawing = true;
             currentX = startX;
             currentY = startY;
@@ -255,14 +272,18 @@ window.inspectionCanvas = (function () {
             return;
         }
 
-        if (!isDrawing) return;
-
-        const pos = getMousePos(e);
-        currentX = pos.x;
-        currentY = pos.y;
-
-        redraw();
-        drawPreview();
+        if (mode === 'calibrate' && isDrawing) {
+            const pos = getMousePos(e);
+            currentX = pos.x;
+            currentY = pos.y;
+            redraw();
+            drawPreview();
+        } else if (mode === 'inspect' && drawingPolygon && polygonPoints.length > 0) {
+            // Show preview line to next point
+            const pos = getMousePos(e);
+            redraw();
+            drawPolygonPreview(pos);
+        }
     }
 
     function onMouseUp(e) {
@@ -275,14 +296,11 @@ window.inspectionCanvas = (function () {
         if (!isDrawing) return;
         isDrawing = false;
 
-        const pos = getMousePos(e);
-        currentX = pos.x;
-        currentY = pos.y;
-
         if (mode === 'calibrate') {
+            const pos = getMousePos(e);
+            currentX = pos.x;
+            currentY = pos.y;
             handleCalibrationEnd();
-        } else if (mode === 'inspect') {
-            handleInspectionEnd();
         }
     }
 
@@ -308,21 +326,78 @@ window.inspectionCanvas = (function () {
     }
 
     function handleInspectionEnd() {
-        const x = Math.min(startX, currentX);
-        const y = Math.min(startY, currentY);
-        const w = Math.abs(currentX - startX);
-        const h = Math.abs(currentY - startY);
+        if (polygonPoints.length !== 4) return;
 
-        if (w > 10 && h > 10) {
-            const newBox = { x, y, w, h, id: Date.now() };
-            anomalyBoxes.push(newBox);
+        // Calculate bounding box and area
+        const bounds = getPolygonBounds(polygonPoints);
+        const area = calculatePolygonArea(polygonPoints);
 
-            redraw();
+        console.log(`Polygon complete: Area = ${area.toFixed(2)} px², Bounds = ${bounds.width.toFixed(0)}x${bounds.height.toFixed(0)}`);
 
-            if (dotNetRef) {
-                dotNetRef.invokeMethodAsync('ReceiveSelection', x, y, w, h, canvas.width, canvas.height);
-            }
+        const newBox = {
+            points: [...polygonPoints],
+            id: Date.now(),
+            bounds: bounds,
+            area: area
+        };
+        anomalyBoxes.push(newBox);
+
+        redraw();
+
+        if (dotNetRef) {
+            // Send polygon points to C#
+            dotNetRef.invokeMethodAsync('ReceivePolygonSelection',
+                polygonPoints.map(p => p.x),
+                polygonPoints.map(p => p.y),
+                area,
+                bounds.width,
+                bounds.height,
+                canvas.width,
+                canvas.height);
         }
+
+        // Reset for next polygon
+        polygonPoints = [];
+        drawingPolygon = false;
+    }
+
+    /**
+     * Calculate polygon area using Shoelace formula
+     */
+    function calculatePolygonArea(points) {
+        if (points.length < 3) return 0;
+
+        let area = 0;
+        for (let i = 0; i < points.length; i++) {
+            const j = (i + 1) % points.length;
+            area += points[i].x * points[j].y;
+            area -= points[j].x * points[i].y;
+        }
+        return Math.abs(area / 2);
+    }
+
+    /**
+     * Get bounding box of polygon
+     */
+    function getPolygonBounds(points) {
+        if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+
+        let minX = points[0].x, maxX = points[0].x;
+        let minY = points[0].y, maxY = points[0].y;
+
+        for (let p of points) {
+            minX = Math.min(minX, p.x);
+            maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y);
+            maxY = Math.max(maxY, p.y);
+        }
+
+        return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
+        };
     }
 
     /**
@@ -336,25 +411,58 @@ window.inspectionCanvas = (function () {
     }
 
     /**
+     * Cancel current drawing in progress
+     */
+    function cancelCurrentDrawing() {
+        polygonPoints = [];
+        drawingPolygon = false;
+        redraw();
+        console.log('Current polygon drawing cancelled');
+    }
+
+    /**
      * Redraw all stored annotations.
      */
     function redraw() {
         if (!ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Draw anomaly boxes (red)
+        // Draw anomaly polygons (red)
         anomalyBoxes.forEach((box, idx) => {
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
-            ctx.fillRect(box.x, box.y, box.w, box.h);
-            ctx.strokeStyle = '#ff0000';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(box.x, box.y, box.w, box.h);
+            if (box.points && box.points.length === 4) {
+                drawPolygon(box.points, '#ff0000', 'rgba(255, 0, 0, 0.2)', 3);
 
-            // Label
-            ctx.fillStyle = '#ff0000';
-            ctx.font = 'bold 16px Inter, sans-serif';
-            ctx.fillText(`#${idx + 1}`, box.x + 8, box.y + 22);
+                // Label at first point
+                ctx.fillStyle = '#ff0000';
+                ctx.font = 'bold 16px Inter, sans-serif';
+                ctx.fillText(`#${idx + 1}`, box.points[0].x + 8, box.points[0].y + 22);
+            }
         });
+    }
+
+    /**
+     * Draw a polygon on canvas
+     */
+    function drawPolygon(points, strokeColor, fillColor, lineWidth) {
+        if (points.length < 3) return;
+
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.closePath();
+
+        if (fillColor) {
+            ctx.fillStyle = fillColor;
+            ctx.fill();
+        }
+
+        if (strokeColor) {
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = lineWidth || 2;
+            ctx.stroke();
+        }
     }
 
     function drawCircle(x, y, radius, color, label) {
@@ -384,19 +492,66 @@ window.inspectionCanvas = (function () {
             ctx.setLineDash([10, 5]);
             ctx.stroke();
             ctx.setLineDash([]);
-        } else if (mode === 'inspect') {
-            // Red box preview
-            const x = Math.min(startX, currentX);
-            const y = Math.min(startY, currentY);
-            const w = Math.abs(currentX - startX);
-            const h = Math.abs(currentY - startY);
+        }
+    }
 
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
-            ctx.fillRect(x, y, w, h);
+    /**
+     * Draw polygon preview (lines connecting clicked points + preview to cursor)
+     */
+    function drawPolygonPreview(cursorPos) {
+        if (polygonPoints.length === 0) return;
+
+        // Draw existing points as circles
+        polygonPoints.forEach((point, idx) => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff0000';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Number label
+            ctx.fillStyle = '#ff0000';
+            ctx.font = 'bold 14px Inter, sans-serif';
+            ctx.fillText(`${idx + 1}`, point.x + 10, point.y - 10);
+        });
+
+        // Draw lines between points
+        if (polygonPoints.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+            for (let i = 1; i < polygonPoints.length; i++) {
+                ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+            }
             ctx.strokeStyle = '#ff0000';
             ctx.lineWidth = 2;
             ctx.setLineDash([8, 4]);
-            ctx.strokeRect(x, y, w, h);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Draw preview line to cursor
+        if (cursorPos && polygonPoints.length < 4) {
+            ctx.beginPath();
+            ctx.moveTo(polygonPoints[polygonPoints.length - 1].x, polygonPoints[polygonPoints.length - 1].y);
+            ctx.lineTo(cursorPos.x, cursorPos.y);
+            ctx.strokeStyle = '#ff6666';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Draw preview closing line (for 3 points)
+        if (polygonPoints.length === 3 && cursorPos) {
+            ctx.beginPath();
+            ctx.moveTo(cursorPos.x, cursorPos.y);
+            ctx.lineTo(polygonPoints[0].x, polygonPoints[0].y);
+            ctx.strokeStyle = '#ff9999';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([2, 4]);
+            ctx.stroke();
             ctx.setLineDash([]);
         }
     }
@@ -408,6 +563,8 @@ window.inspectionCanvas = (function () {
         calibrationLine = null;
         rootPoint = null;
         anomalyBoxes = [];
+        polygonPoints = [];
+        drawingPolygon = false;
         redraw();
     }
 
@@ -430,9 +587,10 @@ window.inspectionCanvas = (function () {
         anomalyBoxes = boxes || [];
         redraw();
     }
+
     /**
- * Remove the box at a specific index (for syncing with Blazor)
- */
+     * Remove the box at a specific index (for syncing with Blazor)
+     */
     function removeBoxByIndex(index) {
         if (index >= 0 && index < anomalyBoxes.length) {
             anomalyBoxes.splice(index, 1);
@@ -447,8 +605,8 @@ window.inspectionCanvas = (function () {
     }
 
     /**
- * Clear all boxes immediately (used when canceling)
- */
+     * Clear all boxes immediately (used when canceling)
+     */
     function clearLastDrawnBox() {
         if (anomalyBoxes.length > 0) {
             anomalyBoxes.pop();
@@ -469,8 +627,9 @@ window.inspectionCanvas = (function () {
         undoLastBox,
         loadAnomalies,
         getAnomalyCount,
-        removeBoxByIndex,   
-        clearLastDrawnBox 
+        removeBoxByIndex,
+        clearLastDrawnBox,
+        cancelCurrentDrawing
     };
 })();
 
@@ -484,4 +643,3 @@ window.constWindowOpen = function (htmlContent) {
         alert("Please allow popups to view the report.");
     }
 };
-

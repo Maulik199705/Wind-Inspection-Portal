@@ -961,13 +961,75 @@
             }
         }
 
-        private async Task CancelDefect()
+        [JSInvokable]
+    public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area, double boundingWidth, double boundingHeight, double refWidth, double refHeight)
+    {
+        if (xCoords.Length != 4 || yCoords.Length != 4)
         {
-            try
+            Logger.LogWarning("Invalid polygon selection: expected 4 points");
+            return;
+        }
+        
+        Logger.LogInformation("4-point polygon drawn: Area={Area:F2} px², Bounds={W:F0}x{H:F0} px", area, boundingWidth, boundingHeight);
+        
+        // Flatten points into single array [x1,y1,x2,y2,x3,y3,x4,y4]
+        var polygonPoints = new List<double>();
+        for (int i = 0; i < 4; i++)
+        {
+            polygonPoints.Add(xCoords[i]);
+            polygonPoints.Add(yCoords[i]);
+        }
+        
+        State.CurrentWidthPx = boundingWidth;
+        State.CurrentHeightPx = boundingHeight;
+        State.CurrentWidthPct = (boundingWidth / refWidth) * 100;
+        State.CurrentHeightPct = (boundingHeight / refHeight) * 100;
+        State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+        
+        // Calculate area in cm² (assuming image represents certain physical dimensions)
+        // You may need to adjust this based on your calibration
+        double widthCm = (boundingWidth / refWidth) * 100;
+        double heightCm = (boundingHeight / refHeight) * 100;
+        double areaCm2 = (area / (refWidth * refHeight)) * 100 * 100; // More accurate for polygons
+        
+        State.CurrentAnomaly = new Anomaly
+        {
+            AnomalyId = $"POLY#{DateTime.Now.Ticks % 10000:X4}",
+            RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
+            BladeSide = State.SelectedView ?? "PS",
+            AreaCm2 = areaCm2,
+            WidthCm = widthCm,
+            Type = "Other",
+            Classification = null,
+            Coordinates = new ImageCoordinates
             {
-                Logger.LogInformation("Defect canceled - removing box at index {Index}", State.CurrentCanvasBoxIndex);
+                PolygonPoints = polygonPoints,
+                ReferenceWidth = refWidth,
+                ReferenceHeight = refHeight,
+                // Keep legacy fields for backward compatibility
+                X = xCoords.Min(),
+                Y = yCoords.Min(),
+                Width = boundingWidth,
+                Height = boundingHeight
+            }
+        };
+        
+        StateHasChanged();
+    }
+
+         private async Task CancelDefect()
+    {
+        try
+        {
+            Logger.LogInformation("Defect canceled - removing drawing");
+            
+            if (State.IsCanvasInitialized)
+            {
+                // Cancel any in-progress polygon drawing
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.cancelCurrentDrawing");
                 
-                if (State.IsCanvasInitialized && State.CurrentCanvasBoxIndex >= 0)
+                // Remove completed polygon if exists
+                if (State.CurrentCanvasBoxIndex >= 0)
                 {
                     try
                     {
@@ -979,23 +1041,24 @@
                         await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
                     }
                 }
-                
-                State.CurrentAnomaly = null;
-                State.CurrentCanvasBoxIndex = -1;
-                State.CurrentWidthPx = 0;
-                State.CurrentHeightPx = 0;
-                State.CurrentWidthPct= 0;
-                State.CurrentHeightPct = 0;
             }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error occurred while canceling the defect.");
-            }
-            finally
-            {
-                StateHasChanged();
-            }
+            
+            State.CurrentAnomaly = null;
+            State.CurrentCanvasBoxIndex = -1;
+            State.CurrentWidthPx = 0;
+            State.CurrentHeightPx = 0;
+            State.CurrentWidthPct = 0;
+            State.CurrentHeightPct = 0;
         }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error occurred while canceling the defect.");
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
           
         private async Task ZoomIn()
         {
