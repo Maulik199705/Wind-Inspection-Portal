@@ -7,6 +7,8 @@
  * - Pan via click-and-drag
  * - Calibration mode: draws blue line (Root → Tip)
  * - Inspection mode: draws red annotation quadrilaterals (4-point polygons)
+ * - Click-to-select boxes with keyboard delete
+ * - Right-click context menu for deletion
  * - Interop with Blazor via invokeMethodAsync
  */
 window.inspectionCanvas = (function () {
@@ -38,6 +40,8 @@ window.inspectionCanvas = (function () {
     let calibrationLine = null;
     let rootPoint = null;
     let anomalyBoxes = []; // Now stores polygons with 4 points
+    let selectedBoxIndex = -1; // Index of currently selected box
+    let hoveredBoxIndex = -1; // Index of hovered box
 
     /**
      * Initialize the canvas with element IDs and .NET reference.
@@ -68,11 +72,12 @@ window.inspectionCanvas = (function () {
         canvas.addEventListener('mouseup', onMouseUp);
         canvas.addEventListener('mouseleave', onMouseUp);
         canvas.addEventListener('wheel', onWheel, { passive: false });
+        canvas.addEventListener('contextmenu', onContextMenu);
 
-        // Context menu prevention
-        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        // Keyboard listener for Delete key
+        document.addEventListener('keydown', onKeyDown);
 
-        console.log('QualiMax Canvas initialized with 4-point polygon support');
+        console.log('QualiMax Canvas initialized with 4-point polygon support + selection/deletion');
         return true;
     }
 
@@ -89,7 +94,9 @@ window.inspectionCanvas = (function () {
      */
     function setMode(newMode) {
         mode = newMode;
+        selectedBoxIndex = -1; // Deselect when changing modes
         updateCursor();
+        redraw();
     }
 
     function updateCursor() {
@@ -229,6 +236,38 @@ window.inspectionCanvas = (function () {
         };
     }
 
+    /**
+     * Check if a point is inside a polygon (ray casting algorithm)
+     */
+    function isPointInPolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i].x, yi = polygon[i].y;
+            const xj = polygon[j].x, yj = polygon[j].y;
+
+            const intersect = ((yi > point.y) !== (yj > point.y))
+                && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
+    /**
+     * Find which box (if any) contains the given point
+     */
+    function findBoxAtPoint(point) {
+        // Search in reverse order (top boxes first)
+        for (let i = anomalyBoxes.length - 1; i >= 0; i--) {
+            const box = anomalyBoxes[i];
+            if (box.points && box.points.length === 4) {
+                if (isPointInPolygon(point, box.points)) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
     function onMouseDown(e) {
         e.preventDefault();
         const pos = getMousePos(e);
@@ -240,6 +279,19 @@ window.inspectionCanvas = (function () {
             lastPanY = e.clientY - panY;
             canvas.style.cursor = 'grabbing';
         } else if (mode === 'inspect') {
+            // Check if clicking on existing box (only when not actively drawing)
+            if (!drawingPolygon && polygonPoints.length === 0) {
+                const clickedBoxIndex = findBoxAtPoint(pos);
+                if (clickedBoxIndex !== -1) {
+                    selectedBoxIndex = clickedBoxIndex;
+                    console.log(`Box #${clickedBoxIndex + 1} selected`);
+                    redraw();
+                    return; // Don't start new polygon
+                } else {
+                    selectedBoxIndex = -1; // Deselect if clicking empty space
+                }
+            }
+
             // 4-point polygon drawing
             polygonPoints.push({ x: pos.x, y: pos.y });
             drawingPolygon = true;
@@ -272,15 +324,25 @@ window.inspectionCanvas = (function () {
             return;
         }
 
+        const pos = getMousePos(e);
+
+        // Update hover state
+        if (mode === 'inspect' && !drawingPolygon && polygonPoints.length === 0) {
+            const newHoveredIndex = findBoxAtPoint(pos);
+            if (newHoveredIndex !== hoveredBoxIndex) {
+                hoveredBoxIndex = newHoveredIndex;
+                canvas.style.cursor = hoveredBoxIndex !== -1 ? 'pointer' : 'crosshair';
+                redraw();
+            }
+        }
+
         if (mode === 'calibrate' && isDrawing) {
-            const pos = getMousePos(e);
             currentX = pos.x;
             currentY = pos.y;
             redraw();
             drawPreview();
         } else if (mode === 'inspect' && drawingPolygon && polygonPoints.length > 0) {
             // Show preview line to next point
-            const pos = getMousePos(e);
             redraw();
             drawPolygonPreview(pos);
         }
@@ -301,6 +363,44 @@ window.inspectionCanvas = (function () {
             currentX = pos.x;
             currentY = pos.y;
             handleCalibrationEnd();
+        }
+    }
+
+    /**
+     * Handle right-click context menu
+     */
+    function onContextMenu(e) {
+        e.preventDefault();
+        const pos = getMousePos(e);
+        const clickedBoxIndex = findBoxAtPoint(pos);
+
+        if (clickedBoxIndex !== -1) {
+            const confirmed = confirm(`Delete defect #${clickedBoxIndex + 1}?`);
+            if (confirmed) {
+                deleteBoxByIndex(clickedBoxIndex);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Handle keyboard events (Delete key)
+     */
+    function onKeyDown(e) {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (selectedBoxIndex !== -1) {
+                e.preventDefault();
+                console.log(`Deleting selected box #${selectedBoxIndex + 1} via keyboard`);
+                deleteBoxByIndex(selectedBoxIndex);
+            }
+        } else if (e.key === 'Escape') {
+            // Deselect or cancel drawing
+            if (drawingPolygon) {
+                cancelCurrentDrawing();
+            } else if (selectedBoxIndex !== -1) {
+                selectedBoxIndex = -1;
+                redraw();
+            }
         }
     }
 
@@ -401,11 +501,39 @@ window.inspectionCanvas = (function () {
     }
 
     /**
+     * Delete box by index
+     */
+    function deleteBoxByIndex(index) {
+        if (index >= 0 && index < anomalyBoxes.length) {
+            console.log(`Deleting box #${index + 1}`);
+            anomalyBoxes.splice(index, 1);
+
+            // Update selection
+            if (selectedBoxIndex === index) {
+                selectedBoxIndex = -1;
+            } else if (selectedBoxIndex > index) {
+                selectedBoxIndex--;
+            }
+
+            redraw();
+
+            // Notify C# of deletion
+            if (dotNetRef) {
+                dotNetRef.invokeMethodAsync('ReceiveBoxDeleted', index);
+            }
+
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Remove the last added anomaly box (for Undo or Cancel).
      */
     function removeLastBox() {
         if (anomalyBoxes.length > 0) {
             anomalyBoxes.pop();
+            selectedBoxIndex = -1;
             redraw();
         }
     }
@@ -430,14 +558,56 @@ window.inspectionCanvas = (function () {
         // Draw anomaly polygons (red)
         anomalyBoxes.forEach((box, idx) => {
             if (box.points && box.points.length === 4) {
-                drawPolygon(box.points, '#ff0000', 'rgba(255, 0, 0, 0.2)', 3);
+                const isSelected = idx === selectedBoxIndex;
+                const isHovered = idx === hoveredBoxIndex;
+
+                // Different colors for selected/hovered
+                const strokeColor = isSelected ? '#ffff00' : (isHovered ? '#ff8800' : '#ff0000');
+                const fillColor = isSelected ? 'rgba(255, 255, 0, 0.25)' : (isHovered ? 'rgba(255, 136, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)');
+                const lineWidth = isSelected ? 4 : (isHovered ? 3.5 : 3);
+
+                drawPolygon(box.points, strokeColor, fillColor, lineWidth);
 
                 // Label at first point
-                ctx.fillStyle = '#ff0000';
+                ctx.fillStyle = strokeColor;
                 ctx.font = 'bold 16px Inter, sans-serif';
                 ctx.fillText(`#${idx + 1}`, box.points[0].x + 8, box.points[0].y + 22);
+
+                // Draw delete button if selected or hovered
+                if (isSelected || isHovered) {
+                    drawDeleteButton(box.points[0].x, box.points[0].y, idx);
+                }
             }
         });
+    }
+
+    /**
+     * Draw a small delete button/icon
+     */
+    function drawDeleteButton(x, y, index) {
+        const btnX = x + 50;
+        const btnY = y - 10;
+        const btnRadius = 12;
+
+        // Red circle
+        ctx.beginPath();
+        ctx.arc(btnX, btnY, btnRadius, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff0000';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // White X
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2.5;
+        const offset = 5;
+        ctx.beginPath();
+        ctx.moveTo(btnX - offset, btnY - offset);
+        ctx.lineTo(btnX + offset, btnY + offset);
+        ctx.moveTo(btnX + offset, btnY - offset);
+        ctx.lineTo(btnX - offset, btnY + offset);
+        ctx.stroke();
     }
 
     /**
@@ -565,6 +735,8 @@ window.inspectionCanvas = (function () {
         anomalyBoxes = [];
         polygonPoints = [];
         drawingPolygon = false;
+        selectedBoxIndex = -1;
+        hoveredBoxIndex = -1;
         redraw();
     }
 
@@ -574,6 +746,7 @@ window.inspectionCanvas = (function () {
     function undoLastBox() {
         if (anomalyBoxes.length > 0) {
             anomalyBoxes.pop();
+            selectedBoxIndex = -1;
             redraw();
             return true;
         }
@@ -585,6 +758,7 @@ window.inspectionCanvas = (function () {
      */
     function loadAnomalies(boxes) {
         anomalyBoxes = boxes || [];
+        selectedBoxIndex = -1;
         redraw();
     }
 
@@ -592,12 +766,7 @@ window.inspectionCanvas = (function () {
      * Remove the box at a specific index (for syncing with Blazor)
      */
     function removeBoxByIndex(index) {
-        if (index >= 0 && index < anomalyBoxes.length) {
-            anomalyBoxes.splice(index, 1);
-            redraw();
-            return true;
-        }
-        return false;
+        return deleteBoxByIndex(index);
     }
 
     function getAnomalyCount() {
@@ -610,6 +779,7 @@ window.inspectionCanvas = (function () {
     function clearLastDrawnBox() {
         if (anomalyBoxes.length > 0) {
             anomalyBoxes.pop();
+            selectedBoxIndex = -1;
             redraw();
             return true;
         }
@@ -629,7 +799,8 @@ window.inspectionCanvas = (function () {
         getAnomalyCount,
         removeBoxByIndex,
         clearLastDrawnBox,
-        cancelCurrentDrawing
+        cancelCurrentDrawing,
+        deleteBoxByIndex
     };
 })();
 

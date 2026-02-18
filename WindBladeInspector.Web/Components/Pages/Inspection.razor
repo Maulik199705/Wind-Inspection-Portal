@@ -264,7 +264,20 @@
             <div class="panel-header-row">
                  <div class="panel-title">Defect Entry</div>
             </div>
-            
+            <div style="background: #1a2332; border: 1px solid #0f0; border-radius: 4px; padding: 12px; margin-bottom: 15px;">
+            <div style="font-size: 0.85rem; color: #0f0; font-weight: bold; margin-bottom: 8px;">
+                🎯 Quick Actions
+            </div>
+
+           <div style="font-size: 0.75rem; color: #aaa; line-height: 1.6;">
+                <div style="margin-bottom: 5px;">• <strong>Click</strong> box to select</div>
+                <div style="margin-bottom: 5px;">• <strong>Delete/Backspace</strong> key to remove</div>
+                <div style="margin-bottom: 5px;">• <strong>Right-click</strong> box for menu</div>
+                <div style="margin-bottom: 5px;">• <strong>Hover</strong> for delete button</div>
+                <div>• <strong>ESC</strong> to deselect/cancel</div>
+            </div>
+          </div>
+
             <!-- Global Actions -->
             <div class="action-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
                 <button class="btn btn-primary" @onclick="GenerateReport" style="flex: 1;">
@@ -925,6 +938,33 @@
             PrevImage();
         }
 
+         [JSInvokable]
+    public void ReceiveBoxDeleted(int index)
+    {
+        Logger.LogInformation("Box #{Index} deleted from canvas", index + 1);
+        
+        if (State.SelectedImage != null && index >= 0 && index < State.SelectedImage.Anomalies.Count)
+        {
+            var deletedAnomaly = State.SelectedImage.Anomalies[index];
+            
+            // Remove from image
+            State.SelectedImage.Anomalies.RemoveAt(index);
+            
+            // Remove from blade
+            if (State.SelectedBlade != null)
+            {
+                State.SelectedBlade.Anomalies.Remove(deletedAnomaly);
+            }
+            
+            // Clear selection if this was selected
+            if (State.SelectedAnomaly == deletedAnomaly)
+            {
+                State.SelectedAnomaly = null;
+            }
+            
+            StateHasChanged();
+        }
+    }
         private void SaveAnomaly()
         {
             if (State.CurrentAnomaly != null &&  State.SelectedBlade != null)
