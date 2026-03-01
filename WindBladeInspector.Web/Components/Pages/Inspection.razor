@@ -117,33 +117,44 @@
                 <InputFile OnChange="HandleBulkFileUpload" multiple style="display: none;" id="bulkFileInput" accept=".jpg,.jpeg,.png,.webp" />
             </div>
 
-            <!-- Simplified Anomaly List -->
-            <div class="nav-section" style="margin-top: 1rem; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
-                <div class="nav-title">Defect Summary</div>
-                <div class="anomaly-list" style="overflow-y: auto;">
-                    @if ( State.SelectedBlade != null &&  State.SelectedBlade.Anomalies.Any())
-                    {
-                        foreach (var anomaly in  State.SelectedBlade.Anomalies.OrderByDescending(a => a.Severity))
-                        {
-                             <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
-                                 @onclick="() => SelectAnomaly(anomaly)"    
-                                 title="@anomaly.GetDefectTypeDisplay()">
-                                <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
-                                <div class="anomaly-list-info">
-                                    <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
-                                    <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
-                                </div>
-                            </div>
-                        }
-                    }
-                    else
-                    {
-                        <div class="empty-state-text">No defects recorded</div>
-                    }
-                </div>
-            </div>
-
-        </div>
+            @* Update the defect summary list to filter by current view *@
+<div class="nav-section" style="margin-top: 1rem; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+    <div class="nav-title">Defect Summary (@State.SelectedView)</div>
+    <div class="anomaly-list" style="overflow-y: auto;">
+        @if (State.SelectedBlade != null && State.SelectedBlade.Anomalies.Any())
+        {
+            var filteredAnomalies = State.SelectedBlade.Anomalies
+                .Where(a => a.BladeSide == State.SelectedView)
+                .OrderByDescending(a => a.Severity)
+                .ToList();
+            
+            @if (filteredAnomalies.Any())
+            {
+                foreach (var anomaly in filteredAnomalies)
+                {
+                    <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
+                         @onclick="() => SelectAnomaly(anomaly)"    
+                         title="@anomaly.GetDefectTypeDisplay()">
+                        <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
+                        <div class="anomaly-list-info">
+                            <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
+                            <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="empty-state-text">No defects in @State.SelectedView view</div>
+            }
+        }
+        else
+        {
+            <div class="empty-state-text">No defects recorded</div>
+        }
+    </div>
+  </div>
+</div>
         
         <!-- CENTER PANEL (Header + Canvas) -->
         <div class="center-panel" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
@@ -325,15 +336,12 @@
                     Classification="@State.CurrentAnomaly.Classification" 
                     ClassificationChanged="@OnCurrentDefectClassificationChanged" />
                 
+                <!-- Display current blade side (read-only) -->
                 <div class="form-group">
                     <label class="form-label">Blade Side</label>
-                    <select class="form-select" @bind="State.CurrentAnomaly.BladeSide">
-                        <option value="">-- Auto (Current View) --</option>
-                        <option value="PS">Pressure Side</option>
-                        <option value="SS">Suction Side</option>
-                        <option value="LE">Leading Edge</option>
-                        <option value="TE">Trailing Edge</option>
-                    </select>
+                    <div style="background: #2a2a2a; padding: 10px; border-radius: 4px; color: #0f0; font-weight: bold;">
+                        @State.SelectedView - @GetViewLabel(State.SelectedView)
+                    </div>
                 </div>
                 
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
@@ -762,18 +770,25 @@
             StateHasChanged();
         }
 
-        private void SelectView(string view)
-        {
-            Logger.LogInformation("View changed to: {View}", view);
-            State.SelectedView = view;
-            State.SelectedImage = null;
-            State.ImageUrl = string.Empty;
-            State.IsCanvasInitialized = false;
-            State.CurrentAnomaly = null;
-            
-            UpdateSelectedViewImages();
-            StateHasChanged();
-        }
+        private async void SelectView(string view)
+{
+    Logger.LogInformation("View changed to: {View}", view);
+    State.SelectedView = view;
+    State.SelectedImage = null;
+    State.ImageUrl = string.Empty;
+    State.IsCanvasInitialized = false;
+    State.CurrentAnomaly = null;
+    
+    // Clear canvas when switching views
+    try
+    {
+        await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
+    }
+    catch { /* Canvas might not be initialized yet */ }
+    
+    UpdateSelectedViewImages();
+    StateHasChanged();
+}
 
         private void UpdateSelectedViewImages()
         {
@@ -870,6 +885,9 @@
                 State.IsCanvasInitialized = result;
                 await SetModeInternal("inspect");
                 await ResetView();
+                
+                // CRITICAL: Load existing defects for this image
+                await LoadExistingDefectsOnCanvas();
             }
         }
         
@@ -966,40 +984,38 @@
         }
     }
         private void SaveAnomaly()
+{
+    if (State.CurrentAnomaly != null && State.SelectedBlade != null)
+    {
+        // Validate that classification is set
+        if (State.CurrentAnomaly.Classification == null)
         {
-            if (State.CurrentAnomaly != null &&  State.SelectedBlade != null)
-            {
-                // Validate that classification is set
-                if (State.CurrentAnomaly.Classification == null)
-                {
-                    Logger.LogWarning("Attempted to save defect without classification");
-                    // Could add UI feedback here
-                    return;
-                }
-
-                if (string.IsNullOrEmpty(State.CurrentAnomaly.BladeSide) || State.CurrentAnomaly.BladeSide == "Unknown")
-                {
-                    State.CurrentAnomaly.BladeSide = State.SelectedView;
-                }
-
-                Logger.LogInformation("Defect saved: Type={Type}, Classification={Classification}, Severity={Severity}, Side={Side}, Blade={Blade}",
-                    State.CurrentAnomaly.Type, 
-                    State.CurrentAnomaly.Classification?.GetFullPath(), 
-                    State.CurrentAnomaly.Severity, 
-                    State.CurrentAnomaly.BladeSide,  
-                    State.SelectedBlade.SerialNumber);
-
-                 State.SelectedBlade.Anomalies.Add(State.CurrentAnomaly);
-                
-                if (State.SelectedImage != null)
-                {
-                    State.SelectedImage.Anomalies.Add(State.CurrentAnomaly);
-                }
-                
-                State.CurrentAnomaly = null;
-                StateHasChanged();
-            }
+            Logger.LogWarning("Attempted to save defect without classification");
+            // Could add UI feedback here
+            return;
         }
+
+        // CRITICAL: Always set BladeSide to current view - don't allow it to be empty or default
+        State.CurrentAnomaly.BladeSide = State.SelectedView;
+
+        Logger.LogInformation("Defect saved: Type={Type}, Classification={Classification}, Severity={Severity}, Side={Side}, Blade={Blade}",
+            State.CurrentAnomaly.Type, 
+            State.CurrentAnomaly.Classification?.GetFullPath(), 
+            State.CurrentAnomaly.Severity, 
+            State.CurrentAnomaly.BladeSide,  
+            State.SelectedBlade.SerialNumber);
+
+        State.SelectedBlade.Anomalies.Add(State.CurrentAnomaly);
+        
+        if (State.SelectedImage != null)
+        {
+            State.SelectedImage.Anomalies.Add(State.CurrentAnomaly);
+        }
+        
+        State.CurrentAnomaly = null;
+        StateHasChanged();
+    }
+}
 
         [JSInvokable]
     public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area, double boundingWidth, double boundingHeight, double refWidth, double refHeight)
@@ -1010,34 +1026,38 @@
             return;
         }
         
-        Logger.LogInformation("4-point polygon drawn: Area={Area:F2} px², Bounds={W:F0}x{H:F0} px", area, boundingWidth, boundingHeight);
+        // Convert 4 arbitrary points to a proper rectangle (find best-fit rectangle)
+        var rectanglePoints = ConvertToRectangle(xCoords, yCoords);
+        
+        Logger.LogInformation("4-point selection converted to rotated rectangle: Area={Area:F2} px², Dims={W:F0}x{H:F0} px", 
+            area, boundingWidth, boundingHeight);
         
         // Flatten points into single array [x1,y1,x2,y2,x3,y3,x4,y4]
         var polygonPoints = new List<double>();
         for (int i = 0; i < 4; i++)
         {
-            polygonPoints.Add(xCoords[i]);
-            polygonPoints.Add(yCoords[i]);
+            polygonPoints.Add(rectanglePoints[i].x);
+            polygonPoints.Add(rectanglePoints[i].y);
         }
         
-        State.CurrentWidthPx = boundingWidth;
-        State.CurrentHeightPx = boundingHeight;
-        State.CurrentWidthPct = (boundingWidth / refWidth) * 100;
-        State.CurrentHeightPct = (boundingHeight / refHeight) * 100;
+        // Recalculate actual rectangle dimensions
+        var rectDimensions = CalculateRectangleDimensions(rectanglePoints);
+        
+        State.CurrentWidthPx = rectDimensions.width;
+        State.CurrentHeightPx = rectDimensions.height;
+        State.CurrentWidthPct = (rectDimensions.width / refWidth) * 100;
+        State.CurrentHeightPct = (rectDimensions.height / refHeight) * 100;
         State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
         
-        // Calculate area in cm² (assuming image represents certain physical dimensions)
-        // You may need to adjust this based on your calibration
-        double widthCm = (boundingWidth / refWidth) * 100;
-        double heightCm = (boundingHeight / refHeight) * 100;
-        double areaCm2 = (area / (refWidth * refHeight)) * 100 * 100; // More accurate for polygons
+        double widthCm = (rectDimensions.width / refWidth) * 100;
+        double heightCm = (rectDimensions.height / refHeight) * 100;
         
         State.CurrentAnomaly = new Anomaly
         {
-            AnomalyId = $"POLY#{DateTime.Now.Ticks % 10000:X4}",
+            AnomalyId = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
             RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
-            BladeSide = State.SelectedView ?? "PS",
-            AreaCm2 = areaCm2,
+            BladeSide = State.SelectedView ?? "PS", // Set to current view
+            AreaCm2 = (widthCm * heightCm),
             WidthCm = widthCm,
             Type = "Other",
             Classification = null,
@@ -1047,17 +1067,115 @@
                 ReferenceWidth = refWidth,
                 ReferenceHeight = refHeight,
                 // Keep legacy fields for backward compatibility
-                X = xCoords.Min(),
-                Y = yCoords.Min(),
-                Width = boundingWidth,
-                Height = boundingHeight
+                X = rectanglePoints.Min(p => p.x),
+                Y = rectanglePoints.Min(p => p.y),
+                Width = rectDimensions.width,
+                Height = rectDimensions.height
             }
         };
         
         StateHasChanged();
     }
 
-         private async Task CancelDefect()
+    /// <summary>
+    /// Converts 4 arbitrary points to a proper rectangle (orthogonal corners)
+    /// by finding the best-fit rotated rectangle
+    /// </summary>
+    private (double x, double y)[] ConvertToRectangle(double[] xCoords, double[] yCoords)
+    {
+        // Calculate center point
+        double cx = xCoords.Average();
+        double cy = yCoords.Average();
+        
+        // Find the two longest opposite edges to determine rectangle orientation
+        var points = new List<(double x, double y, int index)>();
+        for (int i = 0; i < 4; i++)
+        {
+            points.Add((xCoords[i], yCoords[i], i));
+        }
+        
+        // Sort points by angle from center to establish ordering
+        var sortedPoints = points.OrderBy(p => Math.Atan2(p.y - cy, p.x - cx)).ToList();
+        
+        // Calculate the primary axis (longest edge)
+        double maxDist = 0;
+        int p1Idx = 0, p2Idx = 1;
+        
+        for (int i = 0; i < 4; i++)
+        {
+            int j = (i + 1) % 4;
+            double dist = Math.Sqrt(
+                Math.Pow(sortedPoints[j].x - sortedPoints[i].x, 2) + 
+                Math.Pow(sortedPoints[j].y - sortedPoints[i].y, 2));
+            
+            if (dist > maxDist)
+            {
+                maxDist = dist;
+                p1Idx = i;
+                p2Idx = j;
+            }
+        }
+        
+        // Calculate rectangle angle from the longest edge
+        double dx = sortedPoints[p2Idx].x - sortedPoints[p1Idx].x;
+        double dy = sortedPoints[p2Idx].y - sortedPoints[p1Idx].y;
+        double angle = Math.Atan2(dy, dx);
+        
+        // Project all points onto the primary and secondary axes
+        double cosA = Math.Cos(angle);
+        double sinA = Math.Sin(angle);
+        
+        var projections = sortedPoints.Select(p =>
+        {
+            double relX = p.x - cx;
+            double relY = p.y - cy;
+            return (
+                u: relX * cosA + relY * sinA,  // projection on primary axis
+                v: -relX * sinA + relY * cosA  // projection on secondary axis
+            );
+        }).ToList();
+        
+        // Find extents
+        double minU = projections.Min(p => p.u);
+        double maxU = projections.Max(p => p.u);
+        double minV = projections.Min(p => p.v);
+        double maxV = projections.Max(p => p.v);
+        
+        // Generate perfect rectangle corners
+        var rectCorners = new[]
+        {
+            (u: minU, v: minV), // Bottom-left
+            (u: maxU, v: minV), // Bottom-right
+            (u: maxU, v: maxV), // Top-right
+            (u: minU, v: maxV)  // Top-left
+        };
+        
+        // Transform back to image coordinates
+        return rectCorners.Select(corner =>
+        {
+            double x = cx + corner.u * cosA - corner.v * sinA;
+            double y = cy + corner.u * sinA + corner.v * cosA;
+            return (x, y);
+        }).ToArray();
+    }
+
+    /// <summary>
+    /// Calculate the actual width and height of a rectangle from its 4 corner points
+    /// </summary>
+    private (double width, double height) CalculateRectangleDimensions((double x, double y)[] corners)
+    {
+        // Calculate distances between adjacent corners
+        double width = Math.Sqrt(
+            Math.Pow(corners[1].x - corners[0].x, 2) + 
+            Math.Pow(corners[1].y - corners[0].y, 2));
+        
+        double height = Math.Sqrt(
+            Math.Pow(corners[3].x - corners[0].x, 2) + 
+            Math.Pow(corners[3].y - corners[0].y, 2));
+        
+        return (width, height);
+    }
+        private async Task CancelDefect()
     {
         try
         {
@@ -1133,98 +1251,108 @@
             StateHasChanged();
         }
 
-        private void SelectImageDirect(InspectionImage img)
+        private async void SelectImageDirect(InspectionImage img)
         {
             State.SelectedImage = img;
             State.ImageUrl = img.ImageUrl;
-            State.SelectedView =  State.SelectedBlade?.Views.FirstOrDefault(v => v.Images.Contains(img))?.Side ?? State.SelectedView;
+            State.SelectedView = State.SelectedBlade?.Views.FirstOrDefault(v => v.Images.Contains(img))?.Side ?? State.SelectedView;
             
             State.IsCanvasInitialized = false; 
             State.CurrentAnomaly = null;
-            StateHasChanged();
-        }
-        
-        private async Task DeleteAnomaly()
-        {
-             if (State.SelectedAnomaly != null)
-             {
-                 if ( State.SelectedBlade != null &&  State.SelectedBlade.Anomalies.Contains(State.SelectedAnomaly))
-                 {
-                      State.SelectedBlade.Anomalies.Remove(State.SelectedAnomaly);
-                 }
-                 
-                 if (State.SelectedImage != null && State.SelectedImage.Anomalies.Contains(State.SelectedAnomaly))
-                 {
-                     State.SelectedImage.Anomalies.Remove(State.SelectedAnomaly);
-                 }
-                 
-                 await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
-                 
-                 State.SelectedAnomaly = null;
-                 
-                 StateHasChanged();
-             }
-        }
-
-        private async Task ToggleVisualMode()
-        {
-            State.IsVisualMode = !State.IsVisualMode;
-            await Task.Delay(50); 
-            
-            if (State.IsCanvasInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");
-            }
             
             StateHasChanged();
+            
+            // CRITICAL FIX: Wait for image to load, then reload defects
+            await Task.Delay(150); // Give time for image to render
+            await LoadExistingDefectsOnCanvas();
+        }
+
+        /// <summary>
+        /// Loads existing defects for the current image onto the canvas
+        /// </summary>
+        private async Task LoadExistingDefectsOnCanvas()
+        {
+            if (State.SelectedImage == null || !State.IsCanvasInitialized) return;
+
+            try
+            {
+                // Clear all existing boxes first
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
+                
+                // Load defects specific to this image
+                if (State.SelectedImage.Anomalies.Any())
+                {
+                    var anomalyBoxes = State.SelectedImage.Anomalies
+                        .Where(a => a.Coordinates != null)
+                        .Select(a => new
+                        {
+                            points = a.Coordinates.IsPolygon 
+                                ? ConvertPolygonPointsToJsFormat(a.Coordinates.PolygonPoints)
+                                : ConvertRectToPolygonPoints(a.Coordinates),
+                            id = a.Id.GetHashCode(),
+                            area = a.Coordinates.GetAreaInPixels(),
+                            bounds = new
+                            {
+                                x = a.Coordinates.X,
+                                y = a.Coordinates.Y,
+                                width = a.Coordinates.Width,
+                                height = a.Coordinates.Height
+                            }
+                        })
+                        .ToList();
+                    
+                    if (anomalyBoxes.Any())
+                    {
+                        await JSRuntime.InvokeVoidAsync("inspectionCanvas.loadAnomalies", anomalyBoxes);
+                        Logger.LogInformation("Loaded {Count} defects onto canvas for image {ImageId}", 
+                            anomalyBoxes.Count, State.SelectedImage.Id);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to load existing defects on canvas");
+            }
+        }
+
+        /// <summary>
+        /// Convert polygon points array to JavaScript format [{x, y}, {x, y}, ...]
+        /// </summary>
+        private object[] ConvertPolygonPointsToJsFormat(List<double> polygonPoints)
+        {
+            if (polygonPoints == null || polygonPoints.Count != 8) 
+                return Array.Empty<object>();
+            
+            var points = new List<object>();
+            for (int i = 0; i < 4; i++)
+            {
+                points.Add(new { x = polygonPoints[i * 2], y = polygonPoints[i * 2 + 1] });
+            }
+            return points.ToArray();
+        }
+
+        /// <summary>
+        /// Convert rectangle coordinates to 4-point polygon format for JavaScript
+        /// </summary>
+        private object[] ConvertRectToPolygonPoints(ImageCoordinates coords)
+        {
+            return new[]
+            {
+                new { x = coords.X, y = coords.Y },                           // Top-left
+                new { x = coords.X + coords.Width, y = coords.Y },            // Top-right
+                new { x = coords.X + coords.Width, y = coords.Y + coords.Height }, // Bottom-right
+                new { x = coords.X, y = coords.Y + coords.Height }            // Bottom-left
+    };
         }
         
-        private void NextImage()
+        protected async Task GenerateReport()
         {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
+            // Close any open windows first
+            await JSRuntime.InvokeVoidAsync("closeAllChildWindows");
             
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            if (currentIndex < State.SelectedViewImages.Count - 1)
-            {
-                SelectImageDirect(State.SelectedViewImages[currentIndex + 1]);
-            }
-        }
-        
-        private void PrevImage()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
+            // Give time for windows to close
+            await Task.Delay(100);
             
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            if (currentIndex > 0)
-            {
-                SelectImageDirect(State.SelectedViewImages[currentIndex - 1]);
-            }
-        }
-
-        private bool CanNavigateNext()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return false;
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            return currentIndex < State.SelectedViewImages.Count - 1;
-        }
-
-        private bool CanNavigatePrev()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return false;
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            return currentIndex > 0;
-        }
-
-        private void DeleteCurrentImage()
-        {
-            if (State.SelectedImage != null)
-            {
-                DeleteImage(State.SelectedImage);
-            }
-        }
-
-        private async Task GenerateReport()
-        {
             if ( State.SelectedBlade == null) return;
             
             Logger.LogInformation("Generating enhanced report for blade: {BladeSerial}",  State.SelectedBlade.SerialNumber);
@@ -1385,7 +1513,7 @@
                 // Use full classification path
                 sb.Append($"<tr><td>🏷️ Defect Classification</td><td>{defectTypeDisplay}</td></tr>");
                 
-                sb.Append($"<tr><td>📏 Dimensions</td><td>{coords.Width:F1} × {coords.Height:F1} pixels</td></tr>");
+                sb.Append($"<tr><td>📏 Dimensions</td><td>{coords.Width:F1} × {coords.Height:F1} pixels</td>");
                 //sb.Append($"<tr><td>📐 Area (Pixels)</td><td><strong>{areaPixels:N0} px²</strong></td></tr>");
                 var areaCm2 = defect.AreaCm2;
                 sb.Append($"<tr><td>📏 Area (cm²)</td><td><strong>{areaCm2:F2} cm²</strong></td></tr>");
@@ -1491,5 +1619,84 @@
         public async ValueTask DisposeAsync()
         {
             (State.DotNetRef as IDisposable)?.Dispose();
+        }
+
+        private void NextImage()
+        {
+            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
+            
+            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
+            if (currentIndex < State.SelectedViewImages.Count - 1)
+            {
+                SelectImageDirect(State.SelectedViewImages[currentIndex + 1]);
+            }
+        }
+
+        private void PrevImage()
+        {
+            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
+            
+            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
+            if (currentIndex > 0)
+            {
+                SelectImageDirect(State.SelectedViewImages[currentIndex - 1]);
+            }
+        }
+
+        private bool CanNavigateNext()
+        {
+            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return false;
+            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
+            return currentIndex < State.SelectedViewImages.Count - 1;
+        }
+
+        private bool CanNavigatePrev()
+        {
+            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return false;
+            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
+            return currentIndex > 0;
+        }
+
+        private void DeleteCurrentImage()
+        {
+            if (State.SelectedImage != null)
+            {
+                DeleteImage(State.SelectedImage);
+            }
+        }
+
+        private async Task DeleteAnomaly()
+        {
+            if (State.SelectedAnomaly != null)
+            {
+                if (State.SelectedBlade != null && State.SelectedBlade.Anomalies.Contains(State.SelectedAnomaly))
+                {
+                    State.SelectedBlade.Anomalies.Remove(State.SelectedAnomaly);
+                }
+                
+                if (State.SelectedImage != null && State.SelectedImage.Anomalies.Contains(State.SelectedAnomaly))
+                {
+                    State.SelectedImage.Anomalies.Remove(State.SelectedAnomaly);
+                }
+                
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
+                
+                State.SelectedAnomaly = null;
+                
+                StateHasChanged();
+            }
+        }
+
+        private async Task ToggleVisualMode()
+        {
+            State.IsVisualMode = !State.IsVisualMode;
+            await Task.Delay(50); 
+            
+            if (State.IsCanvasInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");
+            }
+            
+            StateHasChanged();
         }
     }
