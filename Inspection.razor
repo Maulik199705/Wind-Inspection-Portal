@@ -1,0 +1,47 @@
+protected async Task GenerateReport()
+{
+    if (State.Project == null || _isGeneratingReport) return;
+
+    _isGeneratingReport = true;
+    StateHasChanged();
+
+    try
+    {
+        Logger.LogInformation("Generating PDF report for project {TurbineId}", State.Project.TurbineId);
+
+        var pdfBytes = await ReportService.GenerateProjectReportAsync(State.Project);
+
+        Logger.LogInformation("PDF generated: {Bytes} bytes for {TurbineId}", pdfBytes.Length, State.Project.TurbineId);
+
+        var fileName = $"WTG_Report_{State.Project.TurbineId}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
+
+        // IMPORTANT: Create a new MemoryStream that won't be disposed immediately
+        var memoryStream = new System.IO.MemoryStream(pdfBytes);
+        
+        // Use DotNetStreamReference with leaveOpen: false so it handles disposal
+        using var streamRef = new DotNetStreamReference(stream: memoryStream, leaveOpen: false);
+        
+        await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, "application/pdf", streamRef);
+
+        // Give JS time to read the stream before it's disposed
+        await Task.Delay(500);
+
+        Logger.LogInformation("PDF report download triggered — {TurbineId}", State.Project.TurbineId);
+    }
+    catch (JSException jsEx)
+    {
+        Logger.LogError(jsEx, "JavaScript error during PDF download for {TurbineId}: {Message}", 
+            State.Project?.TurbineId, jsEx.Message);
+        // Could add UI notification here
+    }
+    catch (Exception ex)
+    {
+        Logger.LogError(ex, "PDF report generation failed for project {TurbineId}", State.Project?.TurbineId);
+        // Could add UI notification here
+    }
+    finally
+    {
+        _isGeneratingReport = false;
+        StateHasChanged();
+    }
+}

@@ -2,6 +2,7 @@ using WindBladeInspector.Web.Components;
 using WindBladeInspector.Core.Interfaces;
 using WindBladeInspector.Core.Services;
 using WindBladeInspector.Infrastructure;
+using WindBladeInspector.Infrastructure.Reports;
 using WindBladeInspector.Web.InspectionLogic;
 using Serilog;
 using Serilog.Events;
@@ -51,6 +52,16 @@ builder.Services.AddScoped<DefectClassificationBuilderService>();
 // Register infrastructure services
 builder.Services.AddScoped<IFileStorageService>(sp =>
     new LocalFileStorageService(builder.Environment.WebRootPath));
+
+// Register PDF report generation service
+// Factory lambda needed because constructor requires webRootPath for blade image loading
+builder.Services.AddScoped<IReportGenerationService>(sp =>
+{
+    var env    = sp.GetRequiredService<IHostEnvironment>();
+    var logger = sp.GetRequiredService<ILogger<PdfReportGenerationService>>();
+    var webRoot = builder.Environment.WebRootPath;
+    return new PdfReportGenerationService(env, logger, webRoot);
+});
 
 var app = builder.Build();
 

@@ -45,6 +45,7 @@
 @inject NavigationManager Navigation
 @inject ILogger<Inspection> Logger
 @inject InspectionState State
+@inject IReportGenerationService ReportService
 @rendermode InteractiveServer
 @implements IAsyncDisposable
 
@@ -291,8 +292,9 @@
 
             <!-- Global Actions -->
             <div class="action-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
-                <button class="btn btn-primary" @onclick="GenerateReport" style="flex: 1;">
-                    📄 Report
+                <button class="btn btn-primary" @onclick="GenerateReport"
+                        disabled="@_isGeneratingReport" style="flex: 1;">
+                    @(_isGeneratingReport ? "⏳ Generating..." : "📄 Report")
                 </button>
             </div>
 
@@ -1345,195 +1347,45 @@
     };
         }
         
+        // ── PDF Report Generation ─────────────────────────────────────────────────
+        private bool _isGeneratingReport = false;
+
         protected async Task GenerateReport()
         {
-            // Close any open windows first
-            await JSRuntime.InvokeVoidAsync("closeAllChildWindows");
-            
-            // Give time for windows to close
-            await Task.Delay(100);
-            
-            if ( State.SelectedBlade == null) return;
-            
-            Logger.LogInformation("Generating enhanced report for blade: {BladeSerial}",  State.SelectedBlade.SerialNumber);
-            
-            var sb = new System.Text.StringBuilder();
-            sb.Append("<!DOCTYPE html><html><head><title>Inspection Report - ");
-            sb.Append( State.SelectedBlade.SerialNumber);
-            sb.Append("</title>");
-            
-            sb.Append($"<base href='{Navigation.BaseUri}' />");
-            
-            sb.Append("<style>");
-            sb.Append("body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #333; background: #f5f5f5; }");
-            sb.Append("h1 { border-bottom: 3px solid #333; padding-bottom: 10px; margin-bottom: 20px; }");
-            sb.Append("h2 { margin-top: 30px; border-bottom: 2px solid #666; padding-bottom: 8px; color: #444; }");
-            sb.Append("h3 { color: #555; margin-top: 25px; }");
-            sb.Append(".summary-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; }");
-            sb.Append(".summary-table th, .summary-table td { border: 1px solid #ddd; padding: 12px; text-align: left; }");
-            sb.Append(".summary-table th { background-color: #2c3e50; color: white; font-weight: 600; }");
-            sb.Append(".severity-1 { background-color: #e0f7fa; } .severity-2 { background-color: #fff3cd; }");
-            sb.Append(".severity-3 { background-color: #ffe0b2; } .severity-4 { background-color: #ffccbc; } .severity-5 { background-color: #ffcdd2; }");
-            sb.Append(".defect-entry { margin: 30px 0; page-break-inside: avoid; border: 2px solid #ddd; padding: 25px; border-radius: 8px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }");
-            sb.Append(".defect-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; margin: -25px -25px 20px -25px; border-radius: 6px 6px 0 0; }");
-            sb.Append(".defect-header h4 { margin: 0; font-size: 1.2rem; }");
-            sb.Append(".defect-image-container { position: relative; display: inline-block; max-width: 100%; margin: 20px 0; }");
-            sb.Append(".main-image-wrapper { position: relative; display: inline-block; width: 100%; }");
-            sb.Append(".report-img { max-width: 100%; height: auto; display: block; border: 2px solid #ccc; border-radius: 4px; }");
-            sb.Append(".single-defect-box { position: absolute; border: 3px solid #ff0000; background-color: rgba(255, 0, 0, 0.15); box-sizing: border-box; }");
-            sb.Append(".defect-marker { position: absolute; top: -25px; left: -3px; background: #ff0000; color: white; font-size: 0.75rem; font-weight: bold; padding: 4px 8px; white-space: nowrap; border-radius: 3px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }");
-            sb.Append(".magnified-inset { position: absolute; top: 20px; right: 20px; width: 250px; height: 250px; border: 4px solid #ff0000; box-shadow: 0 8px 16px rgba(0,0,0,0.4); overflow: hidden; background: white; z-index: 10; border-radius: 4px; }");
-            sb.Append(".magnified-inset::before { content: '🔍 Magnified View'; position: absolute; top: 0; left: 0; right: 0; background: rgba(255, 0, 0, 0.95); color: white; font-size: 0.7rem; font-weight: bold; padding: 5px; text-align: center; z-index: 11; }");
-            sb.Append(".magnified-img { position: absolute; top: 25px; left: 0; width: 100%; height: calc(100% - 25px); object-fit: none; }");
-            sb.Append(".defect-details { width: 100%; margin-top: 20px; border-collapse: collapse; font-size: 0.95rem; }");
-            sb.Append(".defect-details td { padding: 10px; border: 1px solid #ddd; }");
-            sb.Append(".defect-details td:first-child { font-weight: 600; background: #f8f9fa; width: 35%; color: #555; }");
-            sb.Append(".defect-details td:nth-child(2) { background: white; }");
-            sb.Append("@media print { .no-print { display: none !important; } }");
-            sb.Append(".toolbar { background: white; padding: 15px; margin-bottom: 20px; border-radius: 6px; border: 1px solid #ddd; display: flex; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }");
-            sb.Append(".btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }");
-            sb.Append(".btn-primary { background: #007bff; color: white; } .btn-primary:hover { background: #0056b3; transform: translateY(-1px); }");
-            sb.Append(".btn-secondary { background: #6c757d; color: white; } .btn-secondary:hover { background: #545b62; transform: translateY(-1px); }");
-            sb.Append("</style>");
-            
-            sb.Append("<script>");
-            sb.Append("function downloadWord() {");
-            sb.Append("  var header = \"<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>\";");
-            sb.Append("  var content = document.documentElement.innerHTML.replace(/<button.*?>.*?<\\/button>/g, '').replace(/class=\"no-print\"/g, 'style=\"display:none\"');");
-            sb.Append("  content = content.replace(/src=\"\\//g, 'src=\"' + window.location.origin + '/');");
-            sb.Append("  var blob = new Blob(['\\ufeff', header + content + '</html>'], { type: 'application/msword' });");
-            sb.Append("  var url = URL.createObjectURL(blob);");
-            sb.Append("  var link = document.createElement('a'); link.href = url; link.download = 'Inspection_Report.doc'; document.body.appendChild(link); link.click(); document.body.removeChild(link);");
-            sb.Append("}");
-            sb.Append("</script>");
-            
-            sb.Append("</head><body>");
-            sb.Append("<div class='toolbar no-print'>");
-            sb.Append("<button class='btn btn-primary' onclick='window.print()'>🖨️ Print to PDF</button>");
-            sb.Append("<button class='btn btn-secondary' onclick='downloadWord()'>💾 Download Word (.doc)</button>");
-            sb.Append("</div>");
-            
-            sb.Append($"<h1>🔍 Inspection Report: { State.SelectedBlade.SerialNumber}</h1>");
-            sb.Append($"<p><strong>Date:</strong> {DateTime.Now:MMMM dd, yyyy}</p>");
-            sb.Append($"<p><strong>Total Defects Found:</strong> { State.SelectedBlade.Anomalies.Count}</p>");
-            
-            sb.Append("<h2>📊 Executive Summary</h2>");
-            sb.Append("<table class='summary-table'><thead><tr><th>#</th><th>Severity</th><th>Classification</th><th>Side</th><th>Dimensions (px)</th><th>Area (px²)</th></tr></thead><tbody>");
-            
-            int summaryIndex = 1;
-            foreach(var a in  State.SelectedBlade.Anomalies.OrderByDescending(x => x.Severity))
+            if (State.Project == null || _isGeneratingReport) return;
+
+            _isGeneratingReport = true;
+            StateHasChanged();
+
+            try
             {
-                var areaPixels = (a.Coordinates?.Width ?? 0) * (a.Coordinates?.Height ?? 0);
-                sb.Append($"<tr class='severity-{a.Severity}'>");
-                sb.Append($"<td>{summaryIndex++}</td>");
-                sb.Append($"<td><strong>{a.Severity}</strong></td>");
-                
-                // Use new classification display
-                var defectDisplay = a.GetDefectTypeDisplay();
-                sb.Append($"<td>{defectDisplay}</td>");
-                
-                sb.Append($"<td>{a.BladeSide}</td>");
-                sb.Append($"<td>{a.Coordinates?.Width:F0} × {a.Coordinates?.Height:F0}</td>");
-                sb.Append($"<td>{areaPixels:N0}</td>");
-                sb.Append("</tr>");
+                Logger.LogInformation("Generating PDF report for project {TurbineId}", State.Project.TurbineId);
+
+                var pdfBytes = await ReportService.GenerateProjectReportAsync(State.Project);
+
+                Logger.LogInformation("PDF generated: {Bytes} bytes for {TurbineId}", pdfBytes.Length, State.Project.TurbineId);
+
+                var fileName = $"WTG_Report_{State.Project.TurbineId}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
+
+                // Use DotNetStreamReference — the correct Blazor 8 approach for binary file downloads.
+                // Passing byte[] directly via InvokeVoidAsync would serialize it as Base64 in JS,
+                // causing new Uint8Array(bytes) to silently fail.
+                using var streamRef = new DotNetStreamReference(stream: new System.IO.MemoryStream(pdfBytes), leaveOpen: false);
+                await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, "application/pdf", streamRef);
+
+                Logger.LogInformation("PDF report download triggered — {TurbineId}", State.Project.TurbineId);
             }
-            sb.Append("</tbody></table>");
-            
-            sb.Append("<h2>🔬 Detailed Defect Analysis</h2>");
-            sb.Append("<p style='color: #666; font-style: italic;'>Each defect is shown on a separate image with a magnified inset view for detailed inspection.</p>");
-            
-            var allDefects = new List<(Anomaly Anomaly, string ImageUrl, string View, int DefectNumber)>();
-            int defectNumber = 1;
-            
-            foreach (var view in new[] { "PS", "SS", "LE", "TE" })
+            catch (Exception ex)
             {
-                var viewData =  State.SelectedBlade.Views.FirstOrDefault(v => v.Side == view);
-                if (viewData != null)
-                {
-                    foreach (var img in viewData.Images.OrderBy(i => i.SequenceOrder))
-                    {
-                        foreach (var anomaly in img.Anomalies.OrderByDescending(a => a.Severity))
-                        {
-                            allDefects.Add((anomaly, img.ImageUrl, view, defectNumber++));
-                        }
-                    }
-                }
+                Logger.LogError(ex, "PDF report generation failed for project {TurbineId}", State.Project?.TurbineId);
             }
-            
-            Logger.LogInformation("Generating {DefectCount} individual defect images", allDefects.Count);
-            
-            foreach (var defectData in allDefects)
+            finally
             {
-                var defect = defectData.Anomaly;
-                var coords = defect.Coordinates;
-                
-                if (coords == null || coords.ReferenceWidth == 0 || coords.ReferenceHeight == 0) continue;
-                
-                sb.Append("<div class='defect-entry'>");
-                
-                // Use new classification display in header
-                var defectTypeDisplay = defect.GetDefectTypeDisplay();
-                sb.Append($"<div class='defect-header'><h4>Defect #{defectData.DefectNumber}: {defectTypeDisplay} (Severity {defect.Severity})</h4></div>");
-                
-                var areaPixels = coords.Width * coords.Height;
-                var totalImageArea = coords.ReferenceWidth * coords.ReferenceHeight;
-                var areaPercentage = (areaPixels / totalImageArea) * 100;
-                var avgSize = (coords.Width + coords.Height) / 2;
-                double magFactor = avgSize < 100 ? 3.0 : (avgSize < 300 ? 2.5 : 2.0);
-                var centerX = coords.X + (coords.Width / 2);
-                var centerY = coords.Y + (coords.Height / 2);
-                var leftPct = (coords.X / coords.ReferenceWidth) * 100;
-                var topPct = (coords.Y / coords.ReferenceHeight) * 100;
-                var widthPct = (coords.Width / coords.ReferenceWidth) * 100;
-                var heightPct = (coords.Height / coords.ReferenceHeight) * 100;
-                
-                sb.Append("<div class='defect-image-container'>");
-                sb.Append("<div class='main-image-wrapper'>");
-                sb.Append($"<img src='{defectData.ImageUrl}' class='report-img' alt='Defect Image' />");
-                
-                var boxStyle = $"left: {leftPct:F2}%; top: {topPct:F2}%; width: {widthPct:F2}%; height: {heightPct:F2}%;";
-                sb.Append($"<div class='single-defect-box' style='{boxStyle}'>");
-                sb.Append($"<div class='defect-marker'>#{defectData.DefectNumber}</div>");
-                sb.Append("</div>");
-                
-                var centerXPct = (centerX / coords.ReferenceWidth) * 100;
-                var centerYPct = (centerY / coords.ReferenceHeight) * 100;
-                
-                sb.Append("<div class='magnified-inset'>");
-                sb.Append($"<img src='{defectData.ImageUrl}' class='magnified-img' style='transform: scale({magFactor}); transform-origin: {centerXPct:F2}% {centerYPct:F2}%;' alt='Magnified View' />");
-                sb.Append("</div>");
-                
-                sb.Append("</div>");
-                sb.Append("</div>");
-                
-                sb.Append("<table class='defect-details'>");
-                sb.Append($"<tr><td>📍 Location</td><td>{defectData.View} - {GetViewLabel(defectData.View)}</td></tr>");
-                sb.Append($"<tr><td>⚠️ Severity Level</td><td><strong>Level {defect.Severity}</strong></td></tr>");
-                
-                // Use full classification path
-                sb.Append($"<tr><td>🏷️ Defect Classification</td><td>{defectTypeDisplay}</td></tr>");
-                
-                sb.Append($"<tr><td>📏 Dimensions</td><td>{coords.Width:F1} × {coords.Height:F1} pixels</td>");
-                //sb.Append($"<tr><td>📐 Area (Pixels)</td><td><strong>{areaPixels:N0} px²</strong></td></tr>");
-                var areaCm2 = defect.AreaCm2;
-                sb.Append($"<tr><td>📏 Area (cm²)</td><td><strong>{areaCm2:F2} cm²</strong></td></tr>");
-                sb.Append($"<tr><td>📊 Area (% of Image)</td><td>{areaPercentage:F3}%</td></tr>");
-                sb.Append($"<tr><td>🔍 Magnification</td><td>{magFactor:F1}x</td></tr>");
-                
-                if (!string.IsNullOrEmpty(defect.Recommendation))
-                {
-                    sb.Append($"<tr><td>💡 Recommendation</td><td>{defect.Recommendation}</td></tr>");
-                }
-                
-                sb.Append("</table>");
-                sb.Append("</div>");
+                _isGeneratingReport = false;
+                StateHasChanged();
             }
-            
-            sb.Append("</body></html>");
-            
-            await JSRuntime.InvokeVoidAsync("constWindowOpen", sb.ToString());
-            Logger.LogInformation("Report generation complete with {DefectCount} individual defect sections", allDefects.Count);
         }
+
 
         private async Task HandleBulkFileUpload(InputFileChangeEventArgs e)
         {
