@@ -1,0 +1,42 @@
+﻿using QuestPDF.Fluent;
+using QuestPDF.Infrastructure;
+using WindBladeInspector.Core.Entities;
+
+namespace WindBladeInspector.Infrastructure.Reports.Components;
+
+internal sealed class InspectionDetailsComponent
+{
+    private readonly InspectionProject _project;
+    public InspectionDetailsComponent(InspectionProject project) => _project = project;
+
+    public void Compose(IContainer container)
+    {
+        container.Column(col =>
+        {
+            col.Item().PaddingBottom(20).Text("Inspection Details").FontSize(14).Bold();
+
+            col.Item().Table(table =>
+            {
+                table.ColumnsDefinition(cols => { cols.RelativeColumn(); cols.RelativeColumn(); });
+
+                table.Cell().BorderBottom(1).Padding(5).Text("Turbine").Bold();
+                table.Cell().BorderBottom(1).Padding(5).Text("Details").Bold();
+
+                void Row(string lbl, string val)
+                {
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(lbl);
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(val);
+                }
+
+                Row("Wind Farm Name", _project.ParkName);
+                Row("WTG Number", _project.TurbineId);
+                Row("WTG Model", _project.Model);
+                Row("Customer", "Vestas"); // As per sample
+                Row("Location", "Spain");
+                Row("Report Number", $"IV-{_project.InspectionDate:ddMMyy}-004");
+                Row("Inspection Date", _project.InspectionDate.ToString("dd MMMM yyyy"));
+                Row("Report date", DateTime.Now.ToString("dd MMMM yyyy"));
+            });
+        });
+    }
+}
