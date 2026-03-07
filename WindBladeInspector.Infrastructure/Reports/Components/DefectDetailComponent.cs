@@ -121,10 +121,10 @@
 //    }
 //}
 
-
-
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
+using SkiaSharp;
+using System;
 using WindBladeInspector.Core.Entities;
 using static WindBladeInspector.Infrastructure.Reports.PdfReportGenerationService;
 
@@ -147,15 +147,16 @@ internal sealed class DefectDetailComponent
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(10).Text($"Blade {_bladeSerial}").FontSize(14).Bold();
-            col.Item().PaddingBottom(20).Text($"Damage {_defect.DefectNo}").FontSize(12).Bold();
+            col.Item().PaddingBottom(5).Text($"Blade {_bladeSerial}").FontSize(14).Bold().FontColor("#333333");
+            col.Item().PaddingBottom(20).Text($"Damage {_defect.DefectNo}").FontSize(12).Bold().FontColor("#333333");
 
-            col.Item().PaddingBottom(20).Height(250).Element(c =>
+            // ── MASSIVE IMAGE CONTAINER ──
+            col.Item().PaddingBottom(30).Height(380).Element(c =>
             {
                 if (_imageBytes != null)
                 {
-                    c.Image(_imageBytes).FitArea();
-                    // Optional: SkiaSharp logic to draw bounding box can be injected here similarly to old code
+                    byte[] croppedBytes = CropAndAnnotate(_imageBytes, _defect.Anomaly) ?? _imageBytes;
+                    c.Image(croppedBytes).FitArea();
                 }
                 else
                 {
@@ -163,24 +164,117 @@ internal sealed class DefectDetailComponent
                 }
             });
 
+            // ── SPACED MINIMALIST TABLE ──
             col.Item().Table(table =>
             {
-                table.ColumnsDefinition(cols => { cols.ConstantColumn(100); cols.RelativeColumn(); });
+                table.ColumnsDefinition(cols => { cols.ConstantColumn(160); cols.RelativeColumn(); });
 
                 void Row(string lbl, string val)
                 {
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(lbl).Bold();
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(val);
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").PaddingVertical(8).Text(lbl).Bold().FontSize(11).FontColor("#333333");
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").PaddingVertical(8).Text(string.IsNullOrWhiteSpace(val) ? "None" : val).FontSize(11).FontColor("#555555");
                 }
 
                 Row("Blade", _bladeSerial);
                 Row("Side", GetFullViewLabel(_defect.View));
-                Row("Material", "Auxiliary Component"); // Adjust to actual property mapped
+                Row("Material", "Auxiliary Component");
                 Row("Type", _defect.Anomaly.GetDefectTypeDisplay() ?? "Leading Edge Protection");
-                Row("Subtype", _defect.Anomaly.Recommendation ?? "Damaged");
+                Row("Subtype", _defect.Anomaly.Recommendation ?? "None");
                 Row("Severity", _defect.Anomaly.Severity.ToString());
             });
         });
+    }
+
+    // ── 16:9 CINEMATIC ZOOM MATH ──
+    private byte[]? CropAndAnnotate(byte[] imageBytes, Anomaly anomaly)
+    {
+        using var bitmap = SKBitmap.Decode(imageBytes);
+        if (bitmap == null) return null;
+
+        var coords = anomaly.Coordinates;
+        if (coords == null || coords.ReferenceWidth <= 0 || coords.ReferenceHeight <= 0)
+            return imageBytes;
+
+        float scaleX = (float)bitmap.Width / (float)coords.ReferenceWidth;
+        float scaleY = (float)bitmap.Height / (float)coords.ReferenceHeight;
+
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+
+        if (coords.IsPolygon)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                float px = (float)coords.PolygonPoints[i * 2] * scaleX;
+                float py = (float)coords.PolygonPoints[i * 2 + 1] * scaleY;
+                minX = Math.Min(minX, px); minY = Math.Min(minY, py);
+                maxX = Math.Max(maxX, px); maxY = Math.Max(maxY, py);
+            }
+        }
+        else
+        {
+            minX = (float)coords.X * scaleX;
+            minY = (float)coords.Y * scaleY;
+            maxX = minX + (float)coords.Width * scaleX;
+            maxY = minY + (float)coords.Height * scaleY;
+        }
+
+        float defWidth = Math.Max(10, maxX - minX);
+        float defHeight = Math.Max(10, maxY - minY);
+
+        // Calculate Defect Center
+        float centerX = minX + (defWidth / 2f);
+        float centerY = minY + (defHeight / 2f);
+
+        // Force a 16:9 Wide Aspect Ratio for the crop
+        float targetRatio = 16f / 9f;
+
+        // Defect height should take up roughly 35% of the total cropped image height
+        float desiredCropH = defHeight * 2.8f;
+        float desiredCropW = desiredCropH * targetRatio;
+
+        // Ensure the width is wide enough if it's a very long horizontal scratch
+        if (desiredCropW < defWidth * 2.0f)
+        {
+            desiredCropW = defWidth * 2.0f;
+            desiredCropH = desiredCropW / targetRatio;
+        }
+
+        // Prevent zooming in so far that it becomes pixelated
+        desiredCropW = Math.Max(desiredCropW, 500f);
+        desiredCropH = desiredCropW / targetRatio;
+
+        // Calculate Crop Top-Left
+        float cropX = Math.Max(0, centerX - (desiredCropW / 2f));
+        float cropY = Math.Max(0, centerY - (desiredCropH / 2f));
+        float cropW = Math.Min(bitmap.Width - cropX, desiredCropW);
+        float cropH = Math.Min(bitmap.Height - cropY, desiredCropH);
+
+        var info = new SKImageInfo((int)cropW, (int)cropH);
+        using var surface = SKSurface.Create(info);
+        var canvas = surface.Canvas;
+
+        var sourceRect = SKRect.Create(cropX, cropY, cropW, cropH);
+        var destRect = SKRect.Create(0, 0, cropW, cropH);
+        canvas.DrawBitmap(bitmap, sourceRect, destRect);
+
+        // Draw the Red Bounding Box
+        using var strokePaint = new SKPaint
+        {
+            Color = SKColors.Red,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = Math.Max(2.5f, cropW / 250f)
+        };
+
+        var boxRect = SKRect.Create(minX - cropX, minY - cropY, defWidth, defHeight);
+        boxRect.Inflate(12, 12); // Give the box generous breathing room around the defect
+        canvas.DrawRect(boxRect, strokePaint);
+
+        canvas.Flush();
+        using var snapshot = surface.Snapshot();
+        // Save at 100% max quality for the PDF
+        using var data = snapshot.Encode(SKEncodedImageFormat.Jpeg, 100);
+
+        return data.ToArray();
     }
 
     private static string GetFullViewLabel(string side) => side switch

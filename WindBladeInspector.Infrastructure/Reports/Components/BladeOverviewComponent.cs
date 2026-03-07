@@ -101,9 +101,11 @@ internal sealed class BladeOverviewComponent
         {
             col.Item().PaddingBottom(20).Text($"Blade {_blade.SerialNumber} Overview").FontSize(14).Bold();
 
-            // Placeholder for the 4-blade diagram logic. Assuming we display a text placeholder if image isn't generated via Skia
-            col.Item().PaddingBottom(30).Height(150).Background("#F9F9F9").AlignCenter().AlignMiddle()
-               .Text("[ BLADE DIAGRAMS: LE | PS | TE | SS ]\n(Requires Diagram Image Asset)").FontSize(10).FontColor("#999999");
+            // To make this a 100% match, you need an image of 4 blades called "blade_diagram.png" 
+            // in your wwwroot/refrence_docs folder. For now, we will draw a cleaner placeholder box.
+            col.Item().PaddingBottom(30).Height(120).Border(1).BorderColor("#DDDDDD").Background("#FAFAFA")
+               .AlignCenter().AlignMiddle()
+               .Text("BLADE DIAGRAMS\nLE  |  PS  |  TE  |  SS").FontSize(12).FontColor("#AAAAAA").Bold();
 
             col.Item().Table(table =>
             {
@@ -128,9 +130,11 @@ internal sealed class BladeOverviewComponent
 
                     DataCell(d.DefectId);
                     DataCell(GetViewLabel(d.View));
-                    DataCell("Auxiliary Component"); // Replace with actual property if mapped in your domain
+                    DataCell("Auxiliary Component");
                     DataCell(d.Anomaly.GetDefectTypeDisplay() ?? "LEP");
-                    DataCell(d.Anomaly.Recommendation ?? "Damaged");
+
+                    string subtype = string.IsNullOrWhiteSpace(d.Anomaly.Recommendation) ? "None" : d.Anomaly.Recommendation;
+                    DataCell(subtype);
                     DataCell(d.Anomaly.Severity.ToString());
                 }
             });

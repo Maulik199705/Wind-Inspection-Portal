@@ -422,7 +422,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             {
                 page.Size(PageSizes.A4);
                 page.Margin(40);
-                page.Content().Element(c => new CoverPageComponent(project).Compose(c));
+                page.Content().Element(c => new CoverPageComponent(project,_logoBytes).Compose(c));
             });
 
             // 2. Contents Page

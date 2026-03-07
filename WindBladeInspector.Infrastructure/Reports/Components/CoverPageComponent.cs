@@ -136,7 +136,13 @@ namespace WindBladeInspector.Infrastructure.Reports.Components;
 internal sealed class CoverPageComponent
 {
     private readonly InspectionProject _project;
-    public CoverPageComponent(InspectionProject project) => _project = project;
+    private readonly byte[]? _logoBytes;
+
+    public CoverPageComponent(InspectionProject project, byte[]? logoBytes)
+    {
+        _project = project;
+        _logoBytes = logoBytes;
+    }
 
     public void Compose(IContainer container)
     {
