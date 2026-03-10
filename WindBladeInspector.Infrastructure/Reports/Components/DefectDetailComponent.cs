@@ -148,23 +148,25 @@ internal sealed class DefectDetailComponent
         container.Column(col =>
         {
             col.Item().PaddingBottom(5).Text($"Blade {_bladeSerial}").FontSize(14).Bold().FontColor("#333333");
-            col.Item().PaddingBottom(20).Text($"Damage {_defect.DefectNo}").FontSize(12).Bold().FontColor("#333333");
+            col.Item().PaddingBottom(15).Text($"Damage {_defect.DefectNo}").FontSize(12).Bold().FontColor("#333333");
 
-            // ── MASSIVE IMAGE CONTAINER ──
-            col.Item().PaddingBottom(30).Height(380).Element(c =>
+            // ── DYNAMIC IMAGE CONTAINER ──
+            // Notice: No fixed Height(). FitWidth() forces the image to perfectly
+            // span the page margins, naturally adjusting its height with zero blank space.
+            col.Item().PaddingBottom(20).Element(c =>
             {
                 if (_imageBytes != null)
                 {
                     byte[] croppedBytes = CropAndAnnotate(_imageBytes, _defect.Anomaly) ?? _imageBytes;
-                    c.Image(croppedBytes).FitArea();
+                    c.Image(croppedBytes).FitWidth();
                 }
                 else
                 {
-                    c.Background("#EEEEEE").AlignCenter().AlignMiddle().Text("Image Not Available").Italic();
+                    c.Height(200).Background("#EEEEEE").AlignCenter().AlignMiddle().Text("Image Not Available").Italic();
                 }
             });
 
-            // ── SPACED MINIMALIST TABLE ──
+            // ── MINIMALIST TABLE ──
             col.Item().Table(table =>
             {
                 table.ColumnsDefinition(cols => { cols.ConstantColumn(160); cols.RelativeColumn(); });
@@ -185,7 +187,7 @@ internal sealed class DefectDetailComponent
         });
     }
 
-    // ── 16:9 CINEMATIC ZOOM MATH ──
+    // ── PRECISION ZOOM MATH (NO BLACK BORDERS) ──
     private byte[]? CropAndAnnotate(byte[] imageBytes, Anomaly anomaly)
     {
         using var bitmap = SKBitmap.Decode(imageBytes);
@@ -200,7 +202,7 @@ internal sealed class DefectDetailComponent
 
         float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
 
-        if (coords.IsPolygon)
+        if (coords.IsPolygon && coords.PolygonPoints.Count >= 8)
         {
             for (int i = 0; i < 4; i++)
             {
@@ -218,60 +220,55 @@ internal sealed class DefectDetailComponent
             maxY = minY + (float)coords.Height * scaleY;
         }
 
-        float defWidth = Math.Max(10, maxX - minX);
-        float defHeight = Math.Max(10, maxY - minY);
+        float defWidth = Math.Max(1f, maxX - minX);
+        float defHeight = Math.Max(1f, maxY - minY);
 
-        // Calculate Defect Center
-        float centerX = minX + (defWidth / 2f);
-        float centerY = minY + (defHeight / 2f);
+        // Calculate dynamic padding to keep context
+        float paddingX = Math.Max(defWidth * 1.5f, 150f);
+        float paddingY = Math.Max(defHeight * 1.5f, 150f);
 
-        // Force a 16:9 Wide Aspect Ratio for the crop
-        float targetRatio = 16f / 9f;
+        // EXACT integer clamping strictly within the boundaries of the original image
+        // This prevents Skia from trying to read out-of-bounds pixels (which turn black)
+        int cropX = (int)Math.Max(0, minX - paddingX);
+        int cropY = (int)Math.Max(0, minY - paddingY);
+        int cropRight = (int)Math.Min(bitmap.Width, maxX + paddingX);
+        int cropBottom = (int)Math.Min(bitmap.Height, maxY + paddingY);
 
-        // Defect height should take up roughly 35% of the total cropped image height
-        float desiredCropH = defHeight * 2.8f;
-        float desiredCropW = desiredCropH * targetRatio;
+        int cropW = cropRight - cropX;
+        int cropH = cropBottom - cropY;
 
-        // Ensure the width is wide enough if it's a very long horizontal scratch
-        if (desiredCropW < defWidth * 2.0f)
-        {
-            desiredCropW = defWidth * 2.0f;
-            desiredCropH = desiredCropW / targetRatio;
-        }
+        if (cropW <= 0 || cropH <= 0) return imageBytes;
 
-        // Prevent zooming in so far that it becomes pixelated
-        desiredCropW = Math.Max(desiredCropW, 500f);
-        desiredCropH = desiredCropW / targetRatio;
-
-        // Calculate Crop Top-Left
-        float cropX = Math.Max(0, centerX - (desiredCropW / 2f));
-        float cropY = Math.Max(0, centerY - (desiredCropH / 2f));
-        float cropW = Math.Min(bitmap.Width - cropX, desiredCropW);
-        float cropH = Math.Min(bitmap.Height - cropY, desiredCropH);
-
-        var info = new SKImageInfo((int)cropW, (int)cropH);
+        var info = new SKImageInfo(cropW, cropH);
         using var surface = SKSurface.Create(info);
         var canvas = surface.Canvas;
+
+        // Clear the canvas to pure white before drawing to ensure zero black edge bleeding
+        canvas.Clear(SKColors.White);
 
         var sourceRect = SKRect.Create(cropX, cropY, cropW, cropH);
         var destRect = SKRect.Create(0, 0, cropW, cropH);
         canvas.DrawBitmap(bitmap, sourceRect, destRect);
 
-        // Draw the Red Bounding Box
+        // Draw the cleanly padded Red Bounding Box
         using var strokePaint = new SKPaint
         {
             Color = SKColors.Red,
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = Math.Max(2.5f, cropW / 250f)
+            StrokeWidth = Math.Max(2.5f, cropW / 250f),
+            IsAntialias = true
         };
 
         var boxRect = SKRect.Create(minX - cropX, minY - cropY, defWidth, defHeight);
-        boxRect.Inflate(12, 12); // Give the box generous breathing room around the defect
+        boxRect.Inflate(12, 12);
+
+        // Failsafe: Ensure the red box itself doesn't draw outside our cropped boundaries
+        boxRect.Intersect(SKRect.Create(5, 5, cropW - 10, cropH - 10));
+
         canvas.DrawRect(boxRect, strokePaint);
 
         canvas.Flush();
         using var snapshot = surface.Snapshot();
-        // Save at 100% max quality for the PDF
         using var data = snapshot.Encode(SKEncodedImageFormat.Jpeg, 100);
 
         return data.ToArray();

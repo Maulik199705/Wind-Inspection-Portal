@@ -366,6 +366,68 @@ window.inspectionCanvas = (function () {
         }
     }
 
+    function convertToRectangle(points) {
+        // points: [{x, y}, ...] (length 4)
+        // Calculate center
+        const cx = points.reduce((sum, p) => sum + p.x, 0) / 4;
+        const cy = points.reduce((sum, p) => sum + p.y, 0) / 4;
+
+        // Sort by angle from center
+        const sorted = points.slice().sort((a, b) => {
+            const angleA = Math.atan2(a.y - cy, a.x - cx);
+            const angleB = Math.atan2(b.y - cy, b.x - cx);
+            return angleA - angleB;
+        });
+
+        // Find longest edge
+        let maxDist = 0, p1 = 0, p2 = 1;
+        for (let i = 0; i < 4; i++) {
+            let j = (i + 1) % 4;
+            let dx = sorted[j].x - sorted[i].x;
+            let dy = sorted[j].y - sorted[i].y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > maxDist) {
+                maxDist = dist;
+                p1 = i; p2 = j;
+            }
+        }
+        // Angle of longest edge
+        let dx = sorted[p2].x - sorted[p1].x;
+        let dy = sorted[p2].y - sorted[p1].y;
+        let angle = Math.atan2(dy, dx);
+
+        let cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+        // Project points onto axes
+        let projections = sorted.map(p => {
+            let relX = p.x - cx, relY = p.y - cy;
+            return {
+                u: relX * cosA + relY * sinA,
+                v: -relX * sinA + relY * cosA
+            };
+        });
+
+        let minU = Math.min(...projections.map(p => p.u));
+        let maxU = Math.max(...projections.map(p => p.u));
+        let minV = Math.min(...projections.map(p => p.v));
+        let maxV = Math.max(...projections.map(p => p.v));
+
+        // Rectangle corners in (u,v)
+        let rectUV = [
+            { u: minU, v: minV },
+            { u: maxU, v: minV },
+            { u: maxU, v: maxV },
+            { u: minU, v: maxV }
+        ];
+
+        // Convert back to (x, y)
+        return rectUV.map(corner => ({
+            x: cx + corner.u * cosA - corner.v * sinA,
+            y: cy + corner.u * sinA + corner.v * cosA
+        }));
+    }
+
+
     /**
      * Handle right-click context menu
      */
@@ -425,17 +487,55 @@ window.inspectionCanvas = (function () {
         }
     }
 
+    //function handleInspectionEnd() {
+    //    if (polygonPoints.length !== 4) return;
+
+    //    // Calculate bounding box and area
+    //    const bounds = getPolygonBounds(polygonPoints);
+    //    const area = calculatePolygonArea(polygonPoints);
+
+    //    console.log(`Polygon complete: Area = ${area.toFixed(2)} px², Bounds = ${bounds.width.toFixed(0)}x${bounds.height.toFixed(0)}`);
+
+    //    const newBox = {
+    //        points: [...polygonPoints],
+    //        id: Date.now(),
+    //        bounds: bounds,
+    //        area: area
+    //    };
+    //    anomalyBoxes.push(newBox);
+
+    //    redraw();
+
+    //    if (dotNetRef) {
+    //        // Send polygon points to C#
+    //        dotNetRef.invokeMethodAsync('ReceivePolygonSelection',
+    //            polygonPoints.map(p => p.x),
+    //            polygonPoints.map(p => p.y),
+    //            area,
+    //            bounds.width,
+    //            bounds.height,
+    //            canvas.width,
+    //            canvas.height);
+    //    }
+
+    //    // Reset for next polygon
+    //    polygonPoints = [];
+    //    drawingPolygon = false;
+    //}
     function handleInspectionEnd() {
         if (polygonPoints.length !== 4) return;
 
-        // Calculate bounding box and area
-        const bounds = getPolygonBounds(polygonPoints);
-        const area = calculatePolygonArea(polygonPoints);
+        // --- SNAP TO RECTANGLE ---
+        let snappedRect = convertToRectangle(polygonPoints);
+
+        // Calculate bounding box and area using the snapped rectangle
+        const bounds = getPolygonBounds(snappedRect);
+        const area = calculatePolygonArea(snappedRect);
 
         console.log(`Polygon complete: Area = ${area.toFixed(2)} px², Bounds = ${bounds.width.toFixed(0)}x${bounds.height.toFixed(0)}`);
 
         const newBox = {
-            points: [...polygonPoints],
+            points: [...snappedRect],
             id: Date.now(),
             bounds: bounds,
             area: area
@@ -445,10 +545,10 @@ window.inspectionCanvas = (function () {
         redraw();
 
         if (dotNetRef) {
-            // Send polygon points to C#
+            // Send rectangle points to C#
             dotNetRef.invokeMethodAsync('ReceivePolygonSelection',
-                polygonPoints.map(p => p.x),
-                polygonPoints.map(p => p.y),
+                snappedRect.map(p => p.x),
+                snappedRect.map(p => p.y),
                 area,
                 bounds.width,
                 bounds.height,
