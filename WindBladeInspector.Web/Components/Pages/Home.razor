@@ -31,7 +31,9 @@
                 <DataAnnotationsValidator />
 
                 <div class="form-row">
+                    <InputText @bind-Value="_inputModel.Client" placeholder="Client Name" />
                     <InputText @bind-Value="_inputModel.ParkName" placeholder="Park Name" />
+                    <InputText @bind-Value="_inputModel.Location" placeholder="Location" />
                     <InputText @bind-Value="_inputModel.TurbineId" placeholder="Turbine ID" />
                     <InputText @bind-Value="_inputModel.Model" placeholder="Model" />
                     <button type="submit" class="submit-btn">
@@ -284,7 +286,10 @@
         var newProject = DashboardService.CreateProject(
             _inputModel.ParkName,
             _inputModel.TurbineId,
-            _inputModel.Model
+            _inputModel.Model,
+            _inputModel.Client,      // Added
+            _inputModel.Location     // Added
+
         );
 
         Navigation.NavigateTo($"/inspection/{newProject.Id}");
@@ -294,6 +299,8 @@
     {
         public string ParkName { get; set; } = "";
         public string TurbineId { get; set; } = "";
+        public string Client { get; set; } = "";     // Added
+        public string Location { get; set; } = "";   // Added
         public string Model { get; set; } = "";
     }
 }

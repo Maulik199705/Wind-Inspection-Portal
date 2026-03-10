@@ -31,8 +31,8 @@ internal sealed class InspectionDetailsComponent
                 Row("Wind Farm Name", _project.ParkName);
                 Row("WTG Number", _project.TurbineId);
                 Row("WTG Model", _project.Model);
-                Row("Customer", "Vestas"); // As per sample
-                Row("Location", "Spain");
+                Row("Customer", string.IsNullOrWhiteSpace(_project.Client) ? "Not Specified" : _project.Client);
+                Row("Location", string.IsNullOrWhiteSpace(_project.Location) ? "Not Specified" : _project.Location);
                 Row("Report Number", $"IV-{_project.InspectionDate:ddMMyy}-004");
                 Row("Inspection Date", _project.InspectionDate.ToString("dd MMMM yyyy"));
                 Row("Report date", DateTime.Now.ToString("dd MMMM yyyy"));

@@ -14,7 +14,7 @@ public class DashboardService
     /// <summary>
     /// Creates a new empty project with 3 default blades.
     /// </summary>
-    public InspectionProject CreateProject(string parkName, string turbineId, string model)
+    public InspectionProject CreateProject(string parkName, string turbineId, string model,string client,string location)
     {
         var project = new InspectionProject
         {
@@ -22,6 +22,8 @@ public class DashboardService
             ParkName = parkName,
             TurbineId = turbineId,
             Model = model,
+            Client = client,        // Added
+            Location = location,    // Added
             DataCaptureStatus = "Not Started",
             AnalysisStatus = "New",
             InspectionDate = DateTime.Now,

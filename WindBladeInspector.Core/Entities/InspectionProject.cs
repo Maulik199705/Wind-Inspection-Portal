@@ -15,7 +15,9 @@ public class InspectionProject
     
     /// <summary>Turbine model (e.g., "SG114 MY17").</summary>
     public string Model { get; set; } = string.Empty;
-    
+    public string Client { get; set; } = string.Empty;
+    public string Location { get; set; } = string.Empty;
+
     /// <summary>Data capture status: "Complete", "In Progress", "Pending".</summary>
     public string DataCaptureStatus { get; set; } = "Pending";
     

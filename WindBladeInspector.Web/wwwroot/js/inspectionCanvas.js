@@ -487,41 +487,6 @@ window.inspectionCanvas = (function () {
         }
     }
 
-    //function handleInspectionEnd() {
-    //    if (polygonPoints.length !== 4) return;
-
-    //    // Calculate bounding box and area
-    //    const bounds = getPolygonBounds(polygonPoints);
-    //    const area = calculatePolygonArea(polygonPoints);
-
-    //    console.log(`Polygon complete: Area = ${area.toFixed(2)} px², Bounds = ${bounds.width.toFixed(0)}x${bounds.height.toFixed(0)}`);
-
-    //    const newBox = {
-    //        points: [...polygonPoints],
-    //        id: Date.now(),
-    //        bounds: bounds,
-    //        area: area
-    //    };
-    //    anomalyBoxes.push(newBox);
-
-    //    redraw();
-
-    //    if (dotNetRef) {
-    //        // Send polygon points to C#
-    //        dotNetRef.invokeMethodAsync('ReceivePolygonSelection',
-    //            polygonPoints.map(p => p.x),
-    //            polygonPoints.map(p => p.y),
-    //            area,
-    //            bounds.width,
-    //            bounds.height,
-    //            canvas.width,
-    //            canvas.height);
-    //    }
-
-    //    // Reset for next polygon
-    //    polygonPoints = [];
-    //    drawingPolygon = false;
-    //}
     function handleInspectionEnd() {
         if (polygonPoints.length !== 4) return;
 
