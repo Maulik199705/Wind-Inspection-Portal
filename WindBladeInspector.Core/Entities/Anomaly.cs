@@ -144,6 +144,9 @@ public class Anomaly
     /// <summary>Width in centimeters.</summary>
     public double WidthCm { get; set; }
 
+    /// <summary>Height in centimeters.</summary>
+    public double HeightCm { get; set; } = 0; // Default to 0 if not set
+
     /// <summary>Part number/identifier.</summary>
     public int Part { get; set; }
 
@@ -171,5 +174,17 @@ public class Anomaly
         }
 
         return Type;
+    }
+
+    /// <summary>
+    /// Updates the HeightCm property based on the coordinates.
+    /// </summary>
+    public void UpdateHeightFromCoordinates()
+    {
+        if (Coordinates != null)
+        {
+            var (_, height) = Coordinates.GetBoundingBoxDimensions();
+            HeightCm = height;
+        }
     }
 }

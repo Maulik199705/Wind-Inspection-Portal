@@ -55,7 +55,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(40);
+                page.Margin(15);
                 page.Content().Element(c => new CoverPageComponent(project, _logoBytes).Compose(c));
             });
 
@@ -63,7 +63,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(40);
+                page.Margin(15);
                 page.Header().Element(c => PageHeader(c, "01 CONTENTS"));
                 page.Content().Section("ContentsPage")
                               .Element(c => new ContentsPageComponent(project, pageNumbers).Compose(c));
@@ -73,7 +73,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(40);
+                page.Margin(15);
                 page.Header().Element(c => PageHeader(c, "02 INTRODUCTION"));
                 page.Content().Section("IntroSection")
                               .Element(c => new InspectionDetailsComponent(project).Compose(c));
@@ -83,7 +83,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(40);
+                page.Margin(15);
                 page.Header().Element(c => PageHeader(c, "03 INTRODUCTION\nGeneral Turbine Overview"));
                 page.Content().Section("GeneralOverview")
                               .Element(c => new GeneralTurbineOverviewComponent(project).Compose(c));
@@ -99,7 +99,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                 container.Page(page =>
                 {
                     page.Size(PageSizes.A4);
-                    page.Margin(40);
+                    page.Margin(15);
                     string headerNum = (globalPageNum++).ToString("D2");
                     page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
 
@@ -115,7 +115,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                     container.Page(page =>
                     {
                         page.Size(PageSizes.A4);
-                        page.Margin(40);
+                        page.Margin(15);
                         string headerNum = (globalPageNum++).ToString("D2");
                         page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
 
@@ -143,7 +143,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(40);
+                page.Margin(15);
                 page.Content().AlignCenter().AlignMiddle().Column(c =>
                 {
                     c.Item().Text("KEEP YOUR BLADES SAFER WITH...").FontSize(16).Bold();
