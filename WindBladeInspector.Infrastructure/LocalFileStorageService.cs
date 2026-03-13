@@ -3,38 +3,31 @@ using WindBladeInspector.Core.Interfaces;
 namespace WindBladeInspector.Infrastructure;
 
 /// <summary>
-/// Local file storage implementation that saves files to wwwroot/blade-images.
+/// Saves uploaded blade images to a persistent directory outside wwwroot.
+/// Images are served via the /blade-images static files middleware.
 /// </summary>
 public class LocalFileStorageService : IFileStorageService
 {
-    private readonly string _basePath;
+    private readonly string _storageDir;
 
-    public LocalFileStorageService(string webRootPath)
+    /// <param name="storageDir">Absolute path to write files (e.g. App_Data/blade-images).</param>
+    /// <param name="webRootPath">Kept for interface compatibility; not used for writing.</param>
+    public LocalFileStorageService(string storageDir, string webRootPath = "")
     {
-        _basePath = Path.Combine(webRootPath, "blade-images");
-        
-        // Ensure directory exists
-        if (!Directory.Exists(_basePath))
-        {
-            Directory.CreateDirectory(_basePath);
-        }
+        _storageDir = storageDir;
+        Directory.CreateDirectory(_storageDir);
     }
 
-    /// <inheritdoc/>
     public async Task<string> SaveFileAsync(Stream stream, string fileName)
     {
-        // Generate unique filename using GUID
         var extension = Path.GetExtension(fileName);
         var uniqueName = $"{Guid.NewGuid()}{extension}";
-        var filePath = Path.Combine(_basePath, uniqueName);
+        var filePath = Path.Combine(_storageDir, uniqueName);
 
-        // Save file
-        using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
-        {
-            await stream.CopyToAsync(fileStream);
-        }
+        using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        await stream.CopyToAsync(fileStream);
 
-        // Return relative web URL
+        // URL path served by UseStaticFiles middleware
         return $"/blade-images/{uniqueName}";
     }
 }

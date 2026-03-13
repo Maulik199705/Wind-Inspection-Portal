@@ -15,11 +15,8 @@
             <div class="brand-title">QualiMax Inspector</div>
             <div class="brand-sub">Wind Blade Inspection Portal</div>
         </div>
-
         <div class="create-section">
-            <button class="create-btn" @onclick="ToggleCreate">
-                + New Inspection
-            </button>
+            <button class="create-btn" @onclick="ToggleCreate">+ New Inspection</button>
         </div>
     </div>
 
@@ -29,24 +26,38 @@
         <div class="create-card">
             <EditForm Model="@_inputModel" OnValidSubmit="HandleSubmit">
                 <DataAnnotationsValidator />
-
                 <div class="form-row">
                     <InputText @bind-Value="_inputModel.Client" placeholder="Client Name" />
                     <InputText @bind-Value="_inputModel.ParkName" placeholder="Park Name" />
                     <InputText @bind-Value="_inputModel.Location" placeholder="Location" />
                     <InputText @bind-Value="_inputModel.TurbineId" placeholder="Turbine ID" />
                     <InputText @bind-Value="_inputModel.Model" placeholder="Model" />
-                    <button type="submit" class="submit-btn">
-                        Create
-                    </button>
+                    <button type="submit" class="submit-btn">Create</button>
                 </div>
             </EditForm>
         </div>
     }
 
+    <!-- DELETE CONFIRMATION MODAL -->
+    @if (_confirmDeleteId.HasValue)
+    {
+        <div class="modal-backdrop">
+            <div class="modal-box">
+                <div class="modal-title">Delete Project?</div>
+                <div class="modal-body">
+                    This will permanently delete <strong>@_confirmDeleteName</strong> and all its data. This cannot be undone.
+                </div>
+                <div class="modal-actions">
+                    <button class="cancel-btn" @onclick="CancelDelete">Cancel</button>
+                    <button class="delete-confirm-btn" @onclick="ConfirmDelete">Yes, Delete</button>
+                </div>
+            </div>
+        </div>
+    }
+
     <!-- SEARCH -->
     <div class="search-bar">
-        <input type="text" placeholder="Search projects..." @bind="_searchTerm" />
+        <input type="text" placeholder="Search projects..." @bind="_searchTerm" @bind:event="oninput" />
     </div>
 
     <!-- PROJECT GROUPING -->
@@ -58,13 +69,10 @@
         .GroupBy(p => p.ParkName))
     {
         <div class="project-card">
-
             <div class="project-header">
                 <div>
                     <div class="project-name">@group.Key</div>
-                    <div class="project-count">
-                        Total turbines: @group.Count()
-                    </div>
+                    <div class="project-count">Total turbines: @group.Count()</div>
                 </div>
             </div>
 
@@ -74,8 +82,9 @@
                         <th>Turbine ID</th>
                         <th>Model</th>
                         <th>Inspection Date</th>
+                        <th>Defects</th>
                         <th>Status</th>
-                        <th>Action</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -85,29 +94,44 @@
                             <td>@p.TurbineId</td>
                             <td>@p.Model</td>
                             <td>@p.InspectionDate.ToShortDateString()</td>
+                            <td>@p.TotalAnomalies</td>
                             <td>
-                                <span class="status-badge in-progress">
-                                    In Progress
-                                </span>
+                                @if (p.DataCaptureStatus == "Complete")
+                                {
+                                    <span class="status-badge complete">✔ Complete</span>
+                                }
+                                else
+                                {
+                                    <span class="status-badge in-progress">⏳ In Progress</span>
+                                }
                             </td>
-                            <td>
+                            <td class="action-cell">
                                 <button class="resume-btn"
                                         @onclick="@(() => Navigation.NavigateTo("/inspection/" + p.Id))">
                                     Open
+                                </button>
+                                @if (p.DataCaptureStatus != "Complete")
+                                {
+                                    <button class="complete-btn"
+                                            @onclick="@(() => HandleMarkComplete(p.Id))">
+                                        ✔ Complete
+                                    </button>
+                                }
+                                <button class="delete-btn"
+                                        @onclick="@(() => RequestDelete(p.Id, p.TurbineId))">
+                                    🗑
                                 </button>
                             </td>
                         </tr>
                     }
                 </tbody>
             </table>
-
         </div>
     }
 
 </div>
 
 <style>
-
 .dashboard-container {
     background: #0f1115;
     min-height: 100vh;
@@ -144,9 +168,7 @@
     cursor: pointer;
 }
 
-.create-btn:hover {
-    background: #00cc6a;
-}
+.create-btn:hover { background: #00cc6a; }
 
 .create-card {
     background: #1a1d24;
@@ -179,9 +201,7 @@
     cursor: pointer;
 }
 
-.search-bar {
-    margin-bottom: 30px;
-}
+.search-bar { margin-bottom: 30px; }
 
 .search-bar input {
     width: 300px;
@@ -211,10 +231,7 @@
     color: #00ff88;
 }
 
-.project-count {
-    font-size: 0.8rem;
-    color: #777;
-}
+.project-count { font-size: 0.8rem; color: #777; }
 
 .turbine-table {
     width: 100%;
@@ -227,17 +244,11 @@
     text-align: left;
 }
 
-.turbine-table thead {
-    background: #1f242f;
-}
+.turbine-table thead { background: #1f242f; }
 
-.turbine-table tbody tr {
-    border-top: 1px solid #242a35;
-}
+.turbine-table tbody tr { border-top: 1px solid #242a35; }
 
-.turbine-table tbody tr:hover {
-    background: #1c212b;
-}
+.turbine-table tbody tr:hover { background: #1c212b; }
 
 .status-badge {
     padding: 5px 12px;
@@ -246,9 +257,13 @@
     font-weight: 600;
 }
 
-.status-badge.in-progress {
-    background: #333;
-    color: #aaa;
+.status-badge.in-progress { background: #2a2f3a; color: #aaa; }
+.status-badge.complete    { background: rgba(0,255,136,0.15); color: #00ff88; }
+
+.action-cell {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
 .resume-btn {
@@ -258,13 +273,97 @@
     padding: 6px 14px;
     border-radius: 6px;
     cursor: pointer;
+    font-size: 0.82rem;
 }
 
-.resume-btn:hover {
-    background: #00ff88;
-    color: #000;
+.resume-btn:hover { background: #00ff88; color: #000; }
+
+.complete-btn {
+    background: transparent;
+    border: 1px solid #00bfff;
+    color: #00bfff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
 }
 
+.complete-btn:hover { background: #00bfff; color: #000; }
+
+.delete-btn {
+    background: transparent;
+    border: 1px solid #ff4444;
+    color: #ff4444;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+}
+
+.delete-btn:hover { background: #ff4444; color: #fff; }
+
+/* ── Confirmation Modal ─────────────────────────────── */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+}
+
+.modal-box {
+    background: #1a1d24;
+    border: 1px solid #ff4444;
+    border-radius: 12px;
+    padding: 32px;
+    max-width: 420px;
+    width: 100%;
+}
+
+.modal-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #ff4444;
+    margin-bottom: 14px;
+}
+
+.modal-body {
+    color: #ccc;
+    font-size: 0.95rem;
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.cancel-btn {
+    background: transparent;
+    border: 1px solid #555;
+    color: #aaa;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.cancel-btn:hover { border-color: #aaa; color: #fff; }
+
+.delete-confirm-btn {
+    background: #ff4444;
+    border: none;
+    color: #fff;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.delete-confirm-btn:hover { background: #cc2222; }
 </style>
 
 @code {
@@ -272,10 +371,11 @@
     private bool _showCreate = false;
     private string _searchTerm = "";
 
-    private void ToggleCreate()
-    {
-        _showCreate = !_showCreate;
-    }
+    // Delete confirmation state
+    private Guid? _confirmDeleteId = null;
+    private string _confirmDeleteName = "";
+
+    private void ToggleCreate() => _showCreate = !_showCreate;
 
     private void HandleSubmit()
     {
@@ -287,20 +387,47 @@
             _inputModel.ParkName,
             _inputModel.TurbineId,
             _inputModel.Model,
-            _inputModel.Client,      // Added
-            _inputModel.Location     // Added
-
-        );
+            _inputModel.Client,
+            _inputModel.Location);
 
         Navigation.NavigateTo($"/inspection/{newProject.Id}");
+    }
+
+    private void HandleMarkComplete(Guid id)
+    {
+        DashboardService.MarkComplete(id);
+        StateHasChanged();
+    }
+
+    private void RequestDelete(Guid id, string turbineId)
+    {
+        _confirmDeleteId = id;
+        _confirmDeleteName = turbineId;
+    }
+
+    private void ConfirmDelete()
+    {
+        if (_confirmDeleteId.HasValue)
+        {
+            DashboardService.DeleteProject(_confirmDeleteId.Value);
+            _confirmDeleteId = null;
+            _confirmDeleteName = "";
+            StateHasChanged();
+        }
+    }
+
+    private void CancelDelete()
+    {
+        _confirmDeleteId = null;
+        _confirmDeleteName = "";
     }
 
     class ProjectInputModel
     {
         public string ParkName { get; set; } = "";
         public string TurbineId { get; set; } = "";
-        public string Client { get; set; } = "";     // Added
-        public string Location { get; set; } = "";   // Added
+        public string Client { get; set; } = "";
+        public string Location { get; set; } = "";
         public string Model { get; set; } = "";
     }
 }

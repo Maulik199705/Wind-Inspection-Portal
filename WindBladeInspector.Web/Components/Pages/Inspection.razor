@@ -989,31 +989,27 @@
 {
     if (State.CurrentAnomaly != null && State.SelectedBlade != null)
     {
-        // Validate that classification is set
         if (State.CurrentAnomaly.Classification == null)
         {
             Logger.LogWarning("Attempted to save defect without classification");
-            // Could add UI feedback here
             return;
         }
 
-        // CRITICAL: Always set BladeSide to current view - don't allow it to be empty or default
         State.CurrentAnomaly.BladeSide = State.SelectedView;
 
-        Logger.LogInformation("Defect saved: Type={Type}, Classification={Classification}, Severity={Severity}, Side={Side}, Blade={Blade}",
-            State.CurrentAnomaly.Type, 
-            State.CurrentAnomaly.Classification?.GetFullPath(), 
-            State.CurrentAnomaly.Severity, 
-            State.CurrentAnomaly.BladeSide,  
-            State.SelectedBlade.SerialNumber);
-
         State.SelectedBlade.Anomalies.Add(State.CurrentAnomaly);
-        
+
         if (State.SelectedImage != null)
         {
             State.SelectedImage.Anomalies.Add(State.CurrentAnomaly);
         }
-        
+
+        // Persist to LiteDB
+        if (State.Project != null)
+        {
+            DashboardService.SaveProject(State.Project);
+        }
+
         State.CurrentAnomaly = null;
         StateHasChanged();
     }

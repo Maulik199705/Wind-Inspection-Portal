@@ -3,11 +3,11 @@ using WindBladeInspector.Core.Interfaces;
 using WindBladeInspector.Core.Services;
 using WindBladeInspector.Infrastructure;
 using WindBladeInspector.Infrastructure.Reports;
+using WindBladeInspector.Infrastructure.Persistence;
 using WindBladeInspector.Web.InspectionLogic;
 using Serilog;
 using Serilog.Events;
 
-// Configure Serilog for structured logging
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Debug()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
@@ -27,58 +27,70 @@ try
 {
     Log.Information("Starting Wind Blade Inspector application");
 
-var builder = WebApplication.CreateBuilder(args);
+    var builder = WebApplication.CreateBuilder(args);
+    builder.Host.UseSerilog();
 
-// Use Serilog for logging
-builder.Host.UseSerilog();
+    // ?? Persistent data directory (survives redeploys) ??????????????????????
+    // On a server: set DATA_DIR env var to e.g. "D:\AppData\WindBladeInspector"
+    // Locally: falls back to App_Data next to the executable
+    var dataDir = builder.Configuration["DataDirectory"]
+                  ?? Path.Combine(builder.Environment.ContentRootPath, "App_Data");
+    Directory.CreateDirectory(dataDir);
 
-// Add services to the container.
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    var imagesDir = Path.Combine(dataDir, "blade-images");
+    Directory.CreateDirectory(imagesDir);
 
-// Register domain services
-// CHANGED: Use Singleton to keep data alive in memory while app runs
-builder.Services.AddSingleton<DashboardService>();
-builder.Services.AddScoped<InspectionCalculationService>();
+    var dbPath = Path.Combine(dataDir, "windblade.db");
+    Log.Information("Data directory: {DataDir}", dataDir);
 
-// Register inspection state
-builder.Services.AddScoped<InspectionState>();
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
 
-// Register defect classification services
-builder.Services.AddScoped<DefectClassificationValidator>();
-builder.Services.AddScoped<DefectMigrationService>();
-builder.Services.AddScoped<DefectClassificationBuilderService>();
+    // ?? Persistence ??????????????????????????????????????????????????????????
+    builder.Services.AddSingleton<IProjectRepository>(
+        new LiteDbProjectRepository(dbPath));
 
-// Register infrastructure services
-builder.Services.AddScoped<IFileStorageService>(sp =>
-    new LocalFileStorageService(builder.Environment.WebRootPath));
+    builder.Services.AddSingleton<DashboardService>();
+    builder.Services.AddScoped<InspectionCalculationService>();
+    builder.Services.AddScoped<InspectionState>();
+    builder.Services.AddScoped<DefectClassificationValidator>();
+    builder.Services.AddScoped<DefectMigrationService>();
+    builder.Services.AddScoped<DefectClassificationBuilderService>();
 
-// Register PDF report generation service
-// Factory lambda needed because constructor requires webRootPath for blade image loading
-builder.Services.AddScoped<IReportGenerationService>(sp =>
-{
-    var env    = sp.GetRequiredService<IHostEnvironment>();
-    var logger = sp.GetRequiredService<ILogger<PdfReportGenerationService>>();
-    var webRoot = builder.Environment.WebRootPath;
-    return new PdfReportGenerationService(env, logger, webRoot);
-});
+    // ?? File storage: writes to persistent dataDir, serves via /blade-images ?
+    builder.Services.AddSingleton<IFileStorageService>(
+        new LocalFileStorageService(imagesDir, builder.Environment.WebRootPath));
 
-var app = builder.Build();
+    builder.Services.AddScoped<IReportGenerationService>(sp =>
+    {
+        var env = sp.GetRequiredService<IHostEnvironment>();
+        var logger = sp.GetRequiredService<ILogger<PdfReportGenerationService>>();
+        return new PdfReportGenerationService(env, logger, imagesDir);
+    });
 
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
-}
+    var app = builder.Build();
 
-app.UseHttpsRedirection();
-app.UseAntiforgery();
-app.MapStaticAssets();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    if (!app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/Error", createScopeForErrors: true);
+        app.UseHsts();
+    }
 
-    Log.Information("Wind Blade Inspector application started successfully");
+    app.UseHttpsRedirection();
+    app.UseAntiforgery();
+
+    // Serve blade images from the persistent directory outside wwwroot
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(imagesDir),
+        RequestPath = "/blade-images"
+    });
+
+    app.MapStaticAssets();
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+
+    Log.Information("Wind Blade Inspector started. DB: {DbPath}", dbPath);
     app.Run();
 }
 catch (Exception ex)

@@ -1,20 +1,21 @@
 using WindBladeInspector.Core.Entities;
+using WindBladeInspector.Core.Interfaces;
 
 namespace WindBladeInspector.Core.Services;
 
 /// <summary>
-/// Manages inspection projects in memory. 
-/// In a real production app, this would connect to a database.
+/// Manages inspection projects, backed by a persistent repository.
 /// </summary>
 public class DashboardService
 {
-    // In-memory storage for the session
-    private readonly List<InspectionProject> _projects = new();
+    private readonly IProjectRepository _repository;
 
-    /// <summary>
-    /// Creates a new empty project with 3 default blades.
-    /// </summary>
-    public InspectionProject CreateProject(string parkName, string turbineId, string model,string client,string location)
+    public DashboardService(IProjectRepository repository)
+    {
+        _repository = repository;
+    }
+
+    public InspectionProject CreateProject(string parkName, string turbineId, string model, string client, string location)
     {
         var project = new InspectionProject
         {
@@ -22,30 +23,45 @@ public class DashboardService
             ParkName = parkName,
             TurbineId = turbineId,
             Model = model,
-            Client = client,        // Added
-            Location = location,    // Added
-            DataCaptureStatus = "Not Started",
-            AnalysisStatus = "New",
+            Client = client,
+            Location = location,
+            DataCaptureStatus = "In Progress",
+            AnalysisStatus = "In Progress",
             InspectionDate = DateTime.Now,
             Blades = new List<Blade>
             {
-                new Blade { SerialNumber = "A", Length = 0 }, // Length to be filled during inspection
+                new Blade { SerialNumber = "A", Length = 0 },
                 new Blade { SerialNumber = "B", Length = 0 },
                 new Blade { SerialNumber = "C", Length = 0 }
             }
         };
 
-        _projects.Add(project);
+        _repository.Save(project);
         return project;
     }
 
     public InspectionProject? GetProjectById(Guid id)
-    {
-        return _projects.FirstOrDefault(p => p.Id == id);
-    }
+        => _repository.GetById(id);
 
     public List<InspectionProject> GetAllProjects()
+        => _repository.GetAll();
+
+    /// <summary>Persist any changes made to a project.</summary>
+    public void SaveProject(InspectionProject project)
+        => _repository.Save(project);
+
+    /// <summary>Marks a project as Complete and persists it.</summary>
+    public void MarkComplete(Guid id)
     {
-        return _projects;
+        var project = _repository.GetById(id);
+        if (project == null) return;
+
+        project.DataCaptureStatus = "Complete";
+        project.AnalysisStatus = "Complete";
+        _repository.Save(project);
     }
+
+    /// <summary>Permanently deletes a project by ID.</summary>
+    public void DeleteProject(Guid id)
+        => _repository.Delete(id);
 }
