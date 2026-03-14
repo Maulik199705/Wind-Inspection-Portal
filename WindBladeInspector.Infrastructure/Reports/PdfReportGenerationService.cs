@@ -28,6 +28,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
 
     private byte[]? _logoBytes;
     private byte[]? _coverImageBytes;
+    private byte[]? _schematicBytes;
 
     internal const string Black = "#000000";
     internal const string DarkGray = "#333333";
@@ -109,7 +110,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                     string headerNum = (globalPageNum++).ToString("D2");
                     page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
                     page.Content().Section($"BladeOverview_{blade.SerialNumber}")
-                                  .Element(c => new BladeOverviewComponent(blade, bladeDefects).Compose(c));
+                                  .Element(c => new BladeOverviewComponent(blade, bladeDefects, _schematicBytes).Compose(c));
                 });
 
                 bool isFirstDefectPage = true;
@@ -215,22 +216,45 @@ public sealed class PdfReportGenerationService : IReportGenerationService
     }
 
     /// <summary>
-    /// Loads static brand assets (logo, cover image) from wwwroot/Images.
+    /// Loads static brand assets (logo, cover image, blade schematic) from wwwroot/Images.
+    /// Candidate filenames for schematic: BladeSchematic.png, Schematic.png, blade-schematic.png, 
+    /// BladeSchematic.jpg, Schematic.jpg (tried in order, first match wins).
     /// </summary>
     private void LoadAssets()
     {
         if (_logoBytes != null) return;
 
-        // Static assets live in wwwroot/Images — NOT in blade-images
-        var logoPath = Path.Combine(_wwwRootPath, "Images", "Logo.png");
-        var coverPath = Path.Combine(_wwwRootPath, "Images", "Cover.jpeg");
+        var imagesDir = Path.Combine(_wwwRootPath, "Images");
+
+        var logoPath = Path.Combine(imagesDir, "Logo.png");
+        var coverPath = Path.Combine(imagesDir, "Cover.jpeg");
 
         _logoBytes = File.Exists(logoPath) ? File.ReadAllBytes(logoPath) : Array.Empty<byte>();
         _coverImageBytes = File.Exists(coverPath) ? File.ReadAllBytes(coverPath) : null;
 
-        _logger.LogInformation("Assets loaded — Logo: {Logo}, Cover: {Cover}",
+        // Try common schematic filenames in order of preference
+        var schematicCandidates = new[]
+        {
+            "bladeSchmeatic.png"
+           
+        };
+
+        foreach (var candidate in schematicCandidates)
+        {
+            var path = Path.Combine(imagesDir, candidate);
+            if (File.Exists(path))
+            {
+                _schematicBytes = File.ReadAllBytes(path);
+                _logger.LogInformation("Blade schematic loaded: {File}", candidate);
+                break;
+            }
+        }
+
+        _logger.LogInformation(
+            "Assets loaded — Logo: {Logo}, Cover: {Cover}, Schematic: {Schematic}",
             _logoBytes.Length > 0 ? "OK" : "MISSING",
-            _coverImageBytes != null ? "OK" : $"MISSING at {coverPath}");
+            _coverImageBytes != null ? "OK" : $"MISSING at {coverPath}",
+            _schematicBytes != null ? "OK" : $"MISSING (tried {string.Join(", ", schematicCandidates)})");
     }
 
     public record DefectEntry(Anomaly Anomaly, string ImageUrl, string View, int DefectNo, string DefectId);

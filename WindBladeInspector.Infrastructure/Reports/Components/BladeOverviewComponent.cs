@@ -1,121 +1,91 @@
-//using QuestPDF.Fluent;
-//using QuestPDF.Helpers;
-//using QuestPDF.Infrastructure;
-//using WindBladeInspector.Core.Entities;
-
-//namespace WindBladeInspector.Infrastructure.Reports.Components;
-
-///// <summary>
-///// Renders the per-blade section header and anomaly count summary bar.
-///// </summary>
-//internal sealed class BladeOverviewComponent
-//{
-//    private readonly Blade _blade;
-//    private readonly int _bladeIndex;
-
-//    private static readonly string NavyHex = "#0D1B2A";
-//    private static readonly string TealHex = "#00A896";
-//    private static readonly string LightGrayHex = "#E8EDF2";
-//    private static readonly string WhiteHex = "#FFFFFF";
-
-//    public BladeOverviewComponent(Blade blade, int bladeIndex)
-//    {
-//        _blade = blade;
-//        _bladeIndex = bladeIndex;
-//    }
-
-//    public void Compose(IContainer container)
-//    {
-//        container.Column(col =>
-//        {
-//            // ── Blade section header ───────────────────────────────────────────────
-//            col.Item().Background(NavyHex).Padding(12).Row(row =>
-//            {
-//                row.RelativeItem().Column(c =>
-//                {
-//                    c.Item().Text($"Blade {_blade.SerialNumber} — Inspection Results")
-//                        .FontSize(14).FontColor(WhiteHex).Bold();
-//                    if (_blade.Length > 0)
-//                    {
-//                        c.Item().Text($"Blade Length: {_blade.Length:F1} m")
-//                            .FontSize(10).FontColor($"{WhiteHex}99");
-//                    }
-//                });
-
-//                // Condition badge (top-right)
-//                string sevColour = ExecutiveSummaryComponent.GetSeverityColour(_blade.Condition);
-//                row.ConstantItem(90).AlignRight().AlignMiddle()
-//                    .Background(sevColour).Padding(8)
-//                    .Text($"SEV {_blade.Condition}")
-//                    .FontSize(12).FontColor(WhiteHex).Bold().AlignCenter();
-//            });
-
-//            col.Item().Height(3).Background(TealHex);
-
-//            // ── Quick stats strip ──────────────────────────────────────────────────
-//            col.Item().Background(LightGrayHex).Padding(10).Row(statsRow =>
-//            {
-//                QuickStat(statsRow.RelativeItem(), "Total Defects", _blade.Anomalies.Count.ToString());
-//                QuickStat(statsRow.RelativeItem(), "Severity 1–2", _blade.Anomalies.Count(a => a.Severity <= 2).ToString());
-//                QuickStat(statsRow.RelativeItem(), "Severity 3", _blade.Anomalies.Count(a => a.Severity == 3).ToString());
-//                QuickStat(statsRow.RelativeItem(), "Severity 4–5", _blade.Anomalies.Count(a => a.Severity >= 4).ToString());
-//                QuickStat(statsRow.RelativeItem(), "Views", string.Join(", ", _blade.Views.Select(v => v.Side)));
-//            });
-//        });
-//    }
-
-//    private static void QuickStat(IContainer container, string label, string value)
-//    {
-//        container.Column(c =>
-//        {
-//            c.Item().AlignCenter().Text(value).FontSize(16).FontColor("#0D1B2A").Bold();
-//            c.Item().AlignCenter().Text(label).FontSize(8).FontColor("#6C7A89");
-//        });
-//    }
-//}
-
-
-
 using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 using System.Collections.Generic;
 using WindBladeInspector.Core.Entities;
-using static WindBladeInspector.Infrastructure.Reports.PdfReportGenerationService;
+using WindBladeInspector.Core.Enums;
+using WindBladeInspector.Infrastructure.Reports;
 
 namespace WindBladeInspector.Infrastructure.Reports.Components;
 
 internal sealed class BladeOverviewComponent
 {
     private readonly Blade _blade;
-    private readonly List<DefectEntry> _defects;
+    private readonly List<PdfReportGenerationService.DefectEntry> _defects;
+    private readonly byte[]? _schematicBytes;
 
-    public BladeOverviewComponent(Blade blade, List<DefectEntry> defects)
+    private static string SeverityColor(int s) => s switch
+    {
+        1 => "#4CAF50",
+        2 => "#8BC34A",
+        3 => "#FFC107",
+        4 => "#FF9800",
+        5 => "#F44336",
+        _ => "#AAAAAA"
+    };
+
+    public BladeOverviewComponent(Blade blade, List<PdfReportGenerationService.DefectEntry> defects, byte[]? schematicBytes = null)
     {
         _blade = blade;
         _defects = defects;
+        _schematicBytes = schematicBytes;
     }
 
     public void Compose(IContainer container)
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(20).Text($"Blade {_blade.SerialNumber} Overview").FontSize(14).Bold();
+            // ── Title ──────────────────────────────────────────────────────
+            col.Item().PaddingBottom(16)
+               .Text($"Blade {_blade.SerialNumber} Overview")
+               .FontSize(14).Bold().Underline();
 
-            // To make this a 100% match, you need an image of 4 blades called "blade_diagram.png" 
-            // in your wwwroot/refrence_docs folder. For now, we will draw a cleaner placeholder box.
-            col.Item().PaddingBottom(30).Height(120).Border(1).BorderColor("#DDDDDD").Background("#FAFAFA")
-               .AlignCenter().AlignMiddle()
-               .Text("BLADE DIAGRAMS\nLE  |  PS  |  TE  |  SS").FontSize(12).FontColor("#AAAAAA").Bold();
+            // ── Blade schematic image or fallback ──────────────────────────
+            col.Item().PaddingBottom(24).Element(c =>
+            {
+                if (_schematicBytes != null)
+                {
+                    c.MaxHeight(180).AlignCenter()
+                     .Image(_schematicBytes, ImageScaling.FitArea);
+                }
+                else
+                {
+                    c.Height(120).Border(1).BorderColor("#DDDDDD").Background("#FAFAFA")
+                     .AlignCenter().AlignMiddle()
+                     .Text("BLADE SCHEMATIC\nLE  |  PS  |  TE  |  SS")
+                     .FontSize(11).FontColor("#AAAAAA").Bold();
+                }
+            });
 
+            // ── No defects message ─────────────────────────────────────────
+            if (_defects.Count == 0)
+            {
+                col.Item().Padding(12).Border(1).BorderColor("#EEEEEE")
+                   .AlignCenter().AlignMiddle()
+                   .Text("No defects recorded for this blade.")
+                   .FontSize(10).FontColor("#999999").Italic();
+                return;
+            }
+
+            // ── Defect table ───────────────────────────────────────────────
             col.Item().Table(table =>
             {
                 table.ColumnsDefinition(cols =>
                 {
-                    cols.RelativeColumn(); cols.RelativeColumn(); cols.RelativeColumn();
-                    cols.RelativeColumn(); cols.RelativeColumn(); cols.ConstantColumn(60);
+                    cols.RelativeColumn(1.2f); // Damage ID
+                    cols.RelativeColumn(0.8f); // Blade side
+                    cols.RelativeColumn(1.4f); // Material
+                    cols.RelativeColumn(1.6f); // Damage Type
+                    cols.RelativeColumn(1.4f); // Subtype
+                    cols.ConstantColumn(55);   // Severity
                 });
 
-                void HeaderCell(string text) => table.Cell().BorderBottom(1).Padding(5).Text(text).Bold().FontSize(10);
+                // Header cells
+                void HeaderCell(string text) =>
+                    table.Cell()
+                         .BorderBottom(2).BorderColor("#333333")
+                         .Background("#F5F5F5")
+                         .Padding(6)
+                         .Text(text).Bold().FontSize(9).FontColor("#222222");
 
                 HeaderCell("Damage ID");
                 HeaderCell("Blade side");
@@ -124,22 +94,75 @@ internal sealed class BladeOverviewComponent
                 HeaderCell("Subtype");
                 HeaderCell("Severity");
 
+                // Data rows
                 foreach (var d in _defects)
                 {
-                    void DataCell(string text) => table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(text).FontSize(10);
+                    void DataCell(string text) =>
+                        table.Cell()
+                             .BorderBottom(1).BorderColor("#EEEEEE")
+                             .Padding(6)
+                             .Text(text).FontSize(9).FontColor("#333333");
+
+                    string material = ResolveMaterial(d);
+
+                    string subtype = d.Anomaly.Classification != null
+                        ? (d.Anomaly.Classification.GetDefectSubtypeString() ?? "—")
+                        : (string.IsNullOrWhiteSpace(d.Anomaly.Recommendation) ? "—" : d.Anomaly.Recommendation);
 
                     DataCell(d.DefectId);
-                    DataCell(GetViewLabel(d.View));
-                    DataCell("Auxiliary Component");
-                    DataCell(d.Anomaly.GetDefectTypeDisplay() ?? "LEP");
-
-                    string subtype = string.IsNullOrWhiteSpace(d.Anomaly.Recommendation) ? "None" : d.Anomaly.Recommendation;
+                    DataCell(d.View);
+                    DataCell(material);
+                    DataCell(d.Anomaly.GetDefectTypeDisplay() ?? "—");
                     DataCell(subtype);
-                    DataCell(d.Anomaly.Severity.ToString());
+
+                    // Severity cell with color background
+                    string bgColor = SeverityColor(d.Anomaly.Severity);
+                    table.Cell()
+                         .BorderBottom(1).BorderColor("#EEEEEE")
+                         .Background(bgColor)
+                         .AlignCenter().AlignMiddle()
+                         .Padding(6)
+                         .Text(d.Anomaly.Severity.ToString())
+                         .FontSize(9).Bold().FontColor("#FFFFFF");
                 }
             });
         });
     }
 
-    private static string GetViewLabel(string side) => side switch { "PS" => "PS", "SS" => "SS", "LE" => "LE", "TE" => "TE", _ => side };
+    /// <summary>
+    /// Resolves the material/component label from the defect classification.
+    /// </summary>
+    private static string ResolveMaterial(PdfReportGenerationService.DefectEntry d)
+    {
+        var cls = d.Anomaly.Classification;
+        if (cls == null) return "Auxiliary Component";
+
+        if (cls.Category == ComponentCategory.AuxiliaryComponent)
+        {
+            return cls.AuxiliaryComponentType.HasValue
+                ? FormatEnumName(cls.AuxiliaryComponentType.Value.ToString())
+                : "Auxiliary Component";
+        }
+
+        return cls.BladeMaterial.HasValue
+            ? cls.BladeMaterial.Value.ToString()
+            : "Blade";
+    }
+
+    /// <summary>
+    /// Converts a PascalCase enum name to a readable label.
+    /// e.g. "LeadingEdgeProtection" → "Leading Edge Protection"
+    /// </summary>
+    private static string FormatEnumName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+        var result = new System.Text.StringBuilder();
+        foreach (char c in name)
+        {
+            if (char.IsUpper(c) && result.Length > 0)
+                result.Append(' ');
+            result.Append(c);
+        }
+        return result.ToString();
+    }
 }
