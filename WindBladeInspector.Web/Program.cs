@@ -46,7 +46,6 @@ try
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
 
-    // ?? Persistence ??????????????????????????????????????????????????????????
     builder.Services.AddSingleton<IProjectRepository>(
         new LiteDbProjectRepository(dbPath));
 
@@ -57,7 +56,7 @@ try
     builder.Services.AddScoped<DefectMigrationService>();
     builder.Services.AddScoped<DefectClassificationBuilderService>();
 
-    // ?? File storage: writes to persistent dataDir, serves via /blade-images ?
+    // File storage: writes to persistent dataDir, serves via /blade-images ?
     builder.Services.AddSingleton<IFileStorageService>(
         new LocalFileStorageService(imagesDir, builder.Environment.WebRootPath));
 
@@ -65,7 +64,11 @@ try
     {
         var env = sp.GetRequiredService<IHostEnvironment>();
         var logger = sp.GetRequiredService<ILogger<PdfReportGenerationService>>();
-        return new PdfReportGenerationService(env, logger, imagesDir);
+        return new PdfReportGenerationService(
+            env,
+            logger,
+            bladeImagesDir: imagesDir,                       // App_Data/blade-images — uploaded photos
+            wwwRootPath: builder.Environment.WebRootPath);   // wwwroot — Cover.jpeg, Logo.png
     });
 
     var app = builder.Build();

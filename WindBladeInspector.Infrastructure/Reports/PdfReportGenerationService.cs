@@ -17,12 +17,18 @@ namespace WindBladeInspector.Infrastructure.Reports;
 public sealed class PdfReportGenerationService : IReportGenerationService
 {
     private readonly string _referenceDocsPath;
-    private readonly string _webRootPath;
+
+    /// <summary>Path to App_Data/blade-images — where uploaded blade photos are stored.</summary>
+    private readonly string _bladeImagesDir;
+
+    /// <summary>Path to wwwroot — where Cover.jpeg, Logo.png and other static assets live.</summary>
+    private readonly string _wwwRootPath;
+
     private readonly ILogger<PdfReportGenerationService> _logger;
 
     private byte[]? _logoBytes;
+    private byte[]? _coverImageBytes;
 
-    // Brand Palette matching the document
     internal const string Black = "#000000";
     internal const string DarkGray = "#333333";
     internal const string LightGray = "#F0F0F0";
@@ -31,10 +37,12 @@ public sealed class PdfReportGenerationService : IReportGenerationService
     public PdfReportGenerationService(
         IHostEnvironment environment,
         ILogger<PdfReportGenerationService> logger,
-        string webRootPath)
+        string bladeImagesDir,
+        string wwwRootPath)
     {
         _referenceDocsPath = Path.GetFullPath(Path.Combine(environment.ContentRootPath, "..", "refrence_docs"));
-        _webRootPath = webRootPath;
+        _bladeImagesDir = bladeImagesDir;
+        _wwwRootPath = wwwRootPath;
         _logger = logger;
 
         QuestPDF.Settings.License = LicenseType.Community;
@@ -45,8 +53,6 @@ public sealed class PdfReportGenerationService : IReportGenerationService
         LoadAssets();
 
         var allDefects = project.Blades.ToDictionary(b => b.SerialNumber, b => CollectDefects(b));
-
-        // Calculate page numbers before generating the document
         var pageNumbers = CalculatePageNumbers(project, allDefects);
 
         byte[] pdfBytes = Document.Create(container =>
@@ -55,11 +61,12 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(15);
-                page.Content().Element(c => new CoverPageComponent(project, _logoBytes).Compose(c));
+                page.Margin(0, Unit.Point);
+                page.Content().Element(c =>
+                    new CoverPageComponent(project, _logoBytes, _coverImageBytes).Compose(c));
             });
 
-            // 2. Contents Page (TAGGED) - Pass pageNumbers
+            // 2. Contents Page
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
@@ -69,7 +76,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                               .Element(c => new ContentsPageComponent(project, pageNumbers).Compose(c));
             });
 
-            // 3. Introduction - Details (TAGGED)
+            // 3. Introduction - Details
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
@@ -79,7 +86,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                               .Element(c => new InspectionDetailsComponent(project).Compose(c));
             });
 
-            // 4. Introduction - General Overview (TAGGED)
+            // 4. General Overview
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
@@ -95,20 +102,16 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             {
                 var bladeDefects = allDefects[blade.SerialNumber];
 
-                // Blade Overview (TAGGED)
                 container.Page(page =>
                 {
                     page.Size(PageSizes.A4);
                     page.Margin(15);
                     string headerNum = (globalPageNum++).ToString("D2");
                     page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
-
-                    // Tag this section for TOC navigation
                     page.Content().Section($"BladeOverview_{blade.SerialNumber}")
                                   .Element(c => new BladeOverviewComponent(blade, bladeDefects).Compose(c));
                 });
 
-                // Blade Defects (TAGGED FIRST PAGE ONLY)
                 bool isFirstDefectPage = true;
                 foreach (var defect in bladeDefects)
                 {
@@ -119,19 +122,16 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                         string headerNum = (globalPageNum++).ToString("D2");
                         page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
 
-                        // FIX: Use Column to wrap both Section and Component
                         page.Content().Column(col =>
                         {
-                            // Only tag the first defect page for this blade
                             if (isFirstDefectPage)
                             {
                                 col.Item().Section($"BladeDetails_{blade.SerialNumber}");
                                 isFirstDefectPage = false;
                             }
-
                             col.Item().Element(c =>
                             {
-                                var imgBytes = LoadImageBytes(defect.ImageUrl);
+                                var imgBytes = LoadBladeImageBytes(defect.ImageUrl);
                                 new DefectDetailComponent(blade.SerialNumber, defect, imgBytes).Compose(c);
                             });
                         });
@@ -158,46 +158,27 @@ public sealed class PdfReportGenerationService : IReportGenerationService
         return Task.FromResult(pdfBytes);
     }
 
-    /// <summary>
-    /// Calculates page numbers for all major sections in the report.
-    /// Page 1: Cover, Page 2: TOC, Page 3: Intro, Page 4: General Overview, then blades...
-    /// </summary>
     private Dictionary<string, int> CalculatePageNumbers(
         InspectionProject project,
         Dictionary<string, List<DefectEntry>> allDefects)
     {
         var pageMap = new Dictionary<string, int>();
         int currentPage = 1;
+        currentPage++; // Cover
 
-        // Page 1: Cover
-        currentPage++;
+        pageMap["Contents"] = currentPage++;
+        pageMap["IntroSection"] = currentPage++;
+        pageMap["GeneralOverview"] = currentPage++;
 
-        // Page 2: Contents
-        pageMap["Contents"] = currentPage;
-        currentPage++;
-
-        // Page 3: Introduction
-        pageMap["IntroSection"] = currentPage;
-        currentPage++;
-
-        // Page 4: General Overview
-        pageMap["GeneralOverview"] = currentPage;
-        currentPage++;
-
-        // Blade pages
         foreach (var blade in project.Blades)
         {
             var bladeDefects = allDefects[blade.SerialNumber];
+            pageMap[$"BladeOverview_{blade.SerialNumber}"] = currentPage++;
 
-            // Blade Overview page
-            pageMap[$"BladeOverview_{blade.SerialNumber}"] = currentPage;
-            currentPage++;
-
-            // Blade Details (first defect page)
             if (bladeDefects.Count > 0)
             {
                 pageMap[$"BladeDetails_{blade.SerialNumber}"] = currentPage;
-                currentPage += bladeDefects.Count; // Each defect gets one page
+                currentPage += bladeDefects.Count;
             }
         }
 
@@ -213,19 +194,43 @@ public sealed class PdfReportGenerationService : IReportGenerationService
         });
     }
 
-    private byte[]? LoadImageBytes(string imageUrl)
+    /// <summary>
+    /// Loads a blade inspection photo from the persistent blade-images directory.
+    /// URLs are in the form /blade-images/filename.jpg
+    /// </summary>
+    private byte[]? LoadBladeImageBytes(string imageUrl)
     {
         if (string.IsNullOrWhiteSpace(imageUrl)) return null;
+
+        // Strip the /blade-images/ prefix — files live directly in _bladeImagesDir
+        var fileName = Path.GetFileName(imageUrl);
+        var fullPath = Path.Combine(_bladeImagesDir, fileName);
+
+        if (File.Exists(fullPath)) return File.ReadAllBytes(fullPath);
+
+        // Fallback: try resolving relative to wwwroot for legacy paths
         var relative = imageUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = Path.Combine(_webRootPath, relative);
-        return File.Exists(fullPath) ? File.ReadAllBytes(fullPath) : null;
+        var legacyPath = Path.Combine(_wwwRootPath, relative);
+        return File.Exists(legacyPath) ? File.ReadAllBytes(legacyPath) : null;
     }
 
+    /// <summary>
+    /// Loads static brand assets (logo, cover image) from wwwroot/Images.
+    /// </summary>
     private void LoadAssets()
     {
         if (_logoBytes != null) return;
-        var logoPath = Path.Combine(_referenceDocsPath, "Q LOGO.png");
+
+        // Static assets live in wwwroot/Images — NOT in blade-images
+        var logoPath = Path.Combine(_wwwRootPath, "Images", "Logo.png");
+        var coverPath = Path.Combine(_wwwRootPath, "Images", "Cover.jpeg");
+
         _logoBytes = File.Exists(logoPath) ? File.ReadAllBytes(logoPath) : Array.Empty<byte>();
+        _coverImageBytes = File.Exists(coverPath) ? File.ReadAllBytes(coverPath) : null;
+
+        _logger.LogInformation("Assets loaded — Logo: {Logo}, Cover: {Cover}",
+            _logoBytes.Length > 0 ? "OK" : "MISSING",
+            _coverImageBytes != null ? "OK" : $"MISSING at {coverPath}");
     }
 
     public record DefectEntry(Anomaly Anomaly, string ImageUrl, string View, int DefectNo, string DefectId);
