@@ -29,6 +29,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
     private byte[]? _logoBytes;
     private byte[]? _coverImageBytes;
     private byte[]? _schematicBytes;
+    private byte[]? _backCoverImageBytes;
 
     internal const string Black = "#000000";
     internal const string DarkGray = "#333333";
@@ -144,13 +145,9 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(15);
-                page.Content().AlignCenter().AlignMiddle().Column(c =>
-                {
-                    c.Item().Text("KEEP YOUR BLADES SAFER WITH...").FontSize(16).Bold();
-                    c.Item().PaddingTop(20).Text("QUALIMAX\nSERVICES").FontSize(24).Bold().FontColor(DarkGray);
-                    c.Item().PaddingTop(20).Text("www.qmservice.in").FontSize(12).FontColor(DarkGray);
-                });
+                page.Margin(0, Unit.Point);
+                page.Content().Element(c =>
+                    new BackCoverPageComponent(_logoBytes, _backCoverImageBytes).Compose(c));
             });
 
         }).GeneratePdf();
@@ -228,9 +225,11 @@ public sealed class PdfReportGenerationService : IReportGenerationService
 
         var logoPath = Path.Combine(imagesDir, "Logo.png");
         var coverPath = Path.Combine(imagesDir, "Cover.jpeg");
+        var backcoverPath = Path.Combine(imagesDir, "backcover.jpeg");
 
         _logoBytes = File.Exists(logoPath) ? File.ReadAllBytes(logoPath) : Array.Empty<byte>();
         _coverImageBytes = File.Exists(coverPath) ? File.ReadAllBytes(coverPath) : null;
+        _backCoverImageBytes = File.Exists(backcoverPath) ? File.ReadAllBytes(backcoverPath) : null;
 
         // Try common schematic filenames in order of preference
         var schematicCandidates = new[]
