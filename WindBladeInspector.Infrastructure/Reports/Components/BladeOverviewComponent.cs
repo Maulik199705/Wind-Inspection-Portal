@@ -36,11 +36,12 @@ internal sealed class BladeOverviewComponent
         {
             // ── Title ──────────────────────────────────────────────────────
             col.Item().PaddingBottom(16)
+               .AlignCenter() // Center the title
                .Text($"Blade {_blade.SerialNumber} Overview")
-               .FontSize(14).Bold().Underline();
+               .FontSize(14).Bold().FontColor("#4CAF50").Underline(); // Green and bold
 
             // ── Blade schematic image or fallback ──────────────────────────
-            col.Item().PaddingBottom(24).Element(c =>
+            col.Item().PaddingBottom(24).AlignCenter().Element(c =>
             {
                 if (_schematicBytes != null)
                 {
@@ -67,7 +68,7 @@ internal sealed class BladeOverviewComponent
             }
 
             // ── Defect table ───────────────────────────────────────────────
-            col.Item().Table(table =>
+            col.Item().AlignCenter().Table(table =>
             {
                 table.ColumnsDefinition(cols =>
                 {
@@ -85,7 +86,8 @@ internal sealed class BladeOverviewComponent
                          .BorderBottom(2).BorderColor("#333333")
                          .Background("#F5F5F5")
                          .Padding(6)
-                         .Text(text).Bold().FontSize(9).FontColor("#222222");
+                         .AlignCenter() // Center-align header text
+                         .Text(text).Bold().FontSize(9).FontColor("#000000");
 
                 HeaderCell("Damage ID");
                 HeaderCell("Blade side");
@@ -101,6 +103,7 @@ internal sealed class BladeOverviewComponent
                         table.Cell()
                              .BorderBottom(1).BorderColor("#EEEEEE")
                              .Padding(6)
+                             .AlignCenter() // Center-align data text
                              .Text(text).FontSize(9).FontColor("#333333");
 
                     string material = ResolveMaterial(d);

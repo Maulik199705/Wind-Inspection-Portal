@@ -58,7 +58,7 @@ internal sealed class ContentsPageComponent
                         .FontSize(12).FontColor("#333333");
                     table.Cell().PaddingTop(5).AlignRight()
                         .Text(_pageNumbers.GetValueOrDefault($"BladeOverview_{blade.SerialNumber}", 0).ToString())
-                        .FontSize(12).FontColor("#666666");
+                        .FontSize(12).FontColor("#333333");
 
                     // Blade Annotation Details
                     table.Cell().PaddingLeft(20).Text("");
@@ -71,7 +71,7 @@ internal sealed class ContentsPageComponent
                             .FontSize(12).FontColor("#333333");
                         table.Cell().PaddingTop(5).AlignRight()
                             .Text(_pageNumbers.GetValueOrDefault($"BladeDetails_{blade.SerialNumber}", 0).ToString())
-                            .FontSize(12).FontColor("#666666");
+                            .FontSize(12).FontColor("#333333");
                     }
                     else
                     {

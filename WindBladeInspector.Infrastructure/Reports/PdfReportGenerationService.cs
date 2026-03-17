@@ -73,7 +73,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             {
                 page.Size(PageSizes.A4);
                 page.Margin(15);
-                page.Header().Element(c => PageHeader(c, "01 CONTENTS"));
+                page.Header().Element(c => PageHeader(c, "CONTENTS"));
                 page.Content().Section("ContentsPage")
                               .Element(c => new ContentsPageComponent(project, pageNumbers).Compose(c));
             });
@@ -83,7 +83,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             {
                 page.Size(PageSizes.A4);
                 page.Margin(15);
-                page.Header().Element(c => PageHeader(c, "02 INTRODUCTION"));
+                page.Header().Element(c => PageHeader(c, "01 INTRODUCTION"));
                 page.Content().Section("IntroSection")
                               .Element(c => new InspectionDetailsComponent(project).Compose(c));
             });
@@ -93,8 +93,8 @@ public sealed class PdfReportGenerationService : IReportGenerationService
             {
                 page.Size(PageSizes.A4);
                 page.Margin(15);
-                page.Header().Element(c => PageHeader(c, "03 INTRODUCTION\nGeneral Turbine Overview"));
-                page.Content().Section("GeneralOverview")
+                page.Header().Element(c => PageHeader(c, "02 GENERAL TURBINE OVERVIEW"));
+                page.Content().Section("General Overview")
                               .Element(c => new GeneralTurbineOverviewComponent(project).Compose(c));
             });
 
@@ -109,7 +109,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                     page.Size(PageSizes.A4);
                     page.Margin(15);
                     string headerNum = (globalPageNum++).ToString("D2");
-                    page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
+                    page.Header().Element(c => PageHeader(c, $"{headerNum}  BLADE {blade.SerialNumber}"));
                     page.Content().Section($"BladeOverview_{blade.SerialNumber}")
                                   .Element(c => new BladeOverviewComponent(blade, bladeDefects, _schematicBytes).Compose(c));
                 });
@@ -122,7 +122,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                         page.Size(PageSizes.A4);
                         page.Margin(15);
                         string headerNum = (globalPageNum++).ToString("D2");
-                        page.Header().Element(c => PageHeader(c, $"{headerNum} BLADE {blade.SerialNumber}"));
+                        page.Header().Element(c => PageHeader(c, $"{headerNum}  BLADE {blade.SerialNumber}"));
 
                         page.Content().Column(col =>
                         {
@@ -185,11 +185,13 @@ public sealed class PdfReportGenerationService : IReportGenerationService
 
     private void PageHeader(IContainer container, string title)
     {
-        container.PaddingBottom(20).Row(row =>
+        container.PaddingBottom(20).AlignCenter().Row(row =>
         {
-            row.RelativeItem().Text(title).FontSize(14).Bold().FontColor(Black);
+            row.RelativeItem().Text(title).FontSize(14).Bold().FontColor("#000000"); // Green and bold
+
             row.ConstantItem(150).AlignRight().Text("QUALIMAX SERVICES").FontSize(10).FontColor(DarkGray).Bold();
         });
+
     }
 
     /// <summary>
@@ -235,7 +237,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
         var schematicCandidates = new[]
         {
             "bladeSchmeatic.png"
-           
+
         };
 
         foreach (var candidate in schematicCandidates)

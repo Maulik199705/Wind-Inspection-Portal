@@ -13,19 +13,25 @@ internal sealed class InspectionDetailsComponent
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(20).Text("Inspection Details").FontSize(14).Bold();
+            col.Item().PaddingBottom(20)
+                .Text("Inspection Details")
+                .FontSize(14).Bold().FontColor("#4CAF50"); // Green for secondary heading
 
             col.Item().Table(table =>
             {
                 table.ColumnsDefinition(cols => { cols.RelativeColumn(); cols.RelativeColumn(); });
 
-                table.Cell().BorderBottom(1).Padding(5).Text("Turbine").Bold();
-                table.Cell().BorderBottom(1).Padding(5).Text("Details").Bold();
+                table.Cell().BorderBottom(1).Padding(5)
+                    .Text("Turbine").Bold().FontColor("#000000"); // Black and bold
+                table.Cell().BorderBottom(1).Padding(5)
+                    .Text("Details").Bold().FontColor("#000000"); // Black and bold
 
                 void Row(string lbl, string val)
                 {
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(lbl);
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(val);
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5)
+                        .Text(lbl).FontColor("#000000");
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5)
+                        .Text(val).FontColor("#000000");
                 }
 
                 Row("Wind Farm Name", _project.ParkName);

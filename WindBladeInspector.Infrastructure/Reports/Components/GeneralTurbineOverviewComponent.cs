@@ -14,7 +14,12 @@ internal sealed class GeneralTurbineOverviewComponent
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(20).Table(table =>
+            //col.Item().PaddingBottom(20)
+            //    .AlignCenter() // Center the title
+            //    .Text("General Turbine Overview")
+            //    .FontSize(14).Bold().FontColor("#4CAF50"); // Green and bold
+
+            col.Item().AlignCenter().Table(table =>
             {
                 table.ColumnsDefinition(cols => {
                     cols.ConstantColumn(80); // Severity
@@ -22,43 +27,56 @@ internal sealed class GeneralTurbineOverviewComponent
                 });
 
                 // Headers
-                table.Cell().BorderBottom(1).Padding(5).Text("Severity").Bold();
+                table.Cell().BorderBottom(1).Padding(5).Text("Severity").Bold().FontColor("#000000"); // Black and bold
                 foreach (var b in _project.Blades)
-                    table.Cell().BorderBottom(1).Padding(5).Text($"Blade {b.SerialNumber}").Bold();
+                    table.Cell().BorderBottom(1).Padding(5).Text($"Blade {b.SerialNumber}").Bold().FontColor("#000000"); // Black and bold
 
                 // Data Rows
                 for (int sev = 1; sev <= 5; sev++)
                 {
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(sev.ToString()).Bold();
+                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(sev.ToString()).Bold().FontColor("#333333");
                     foreach (var b in _project.Blades)
                     {
                         int count = b.Anomalies?.Count(a => a.Severity == sev) ?? 0;
-                        table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(count > 0 ? count.ToString() : "0");
+                        table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(count > 0 ? count.ToString() : "0").FontColor("#333333");
                     }
                 }
 
                 // Totals
-                table.Cell().Padding(5).Text("Total").Bold();
+                table.Cell().Padding(5).Text("Total").Bold().FontColor("#000000"); // Black and bold
                 foreach (var b in _project.Blades)
                 {
                     int total = b.Anomalies?.Count ?? 0;
-                    table.Cell().Padding(5).Text(total.ToString()).Bold();
+                    table.Cell().Padding(5).Text(total.ToString()).Bold().FontColor("#000000"); // Black and bold
                 }
             });
 
-            col.Item().PaddingTop(30).Table(table =>
+            col.Item().PaddingTop(30).AlignCenter().Table(table =>
             {
-                table.ColumnsDefinition(cols => { cols.ConstantColumn(60); cols.ConstantColumn(100); cols.RelativeColumn(); });
+                table.ColumnsDefinition(cols =>
+                {
+                    cols.ConstantColumn(60); // Severity column
+                    cols.ConstantColumn(100); // Title column
+                    cols.RelativeColumn(); // Description column
+                });
 
-                table.Cell().BorderBottom(1).Padding(5).Text("Severity").Bold();
-                table.Cell().BorderBottom(1).Padding(5).Text("");
-                table.Cell().BorderBottom(1).Padding(5).Text("Description").Bold();
+                // Header row
+                table.Cell().BorderBottom(2).BorderColor("#000000").Padding(8)
+                    .AlignCenter().Text("Severity").Bold().FontColor("#000000"); // Black and bold
+                table.Cell().BorderBottom(2).BorderColor("#000000").Padding(8)
+                    .AlignCenter().Text("Severity Type").Bold().FontColor("#000000"); // Black and bold
+                table.Cell().BorderBottom(2).BorderColor("#000000").Padding(8)
+                    .AlignCenter().Text("Description").Bold().FontColor("#000000"); // Black and bold
 
+                // Data rows
                 void SevRow(string sev, string title, string desc)
                 {
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(sev).Bold();
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(title).Bold();
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").Padding(5).Text(desc);
+                    table.Cell().BorderBottom(1).BorderColor("#CCCCCC").Padding(8)
+                        .AlignCenter().Text(sev).Bold().FontColor("#333333");
+                    table.Cell().BorderBottom(1).BorderColor("#CCCCCC").Padding(8)
+                        .AlignCenter().Text(title).Bold().FontColor("#333333");
+                    table.Cell().BorderBottom(1).BorderColor("#CCCCCC").Padding(8)
+                        .AlignLeft().Text(desc).FontColor("#333333"); // Align description to the left
                 }
 
                 SevRow("1", "Cosmetic", "No intervention or immediate action is required");

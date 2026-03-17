@@ -28,38 +28,51 @@ internal sealed class DefectDetailComponent
 
         container.Column(col =>
         {
-            col.Item().PaddingBottom(5).Text($"Blade {_bladeSerial}").FontSize(14).Bold().FontColor("#333333");
-            col.Item().PaddingBottom(15).Text($"Damage {_defect.DefectNo}").FontSize(12).Bold().FontColor("#333333");
+            col.Item().PaddingBottom(5)
+                .AlignCenter() // Center the title
+                .Text($"Blade {_bladeSerial}")
+                .FontSize(14).Bold().FontColor("#4CAF50"); // Green and bold
+
+            col.Item().PaddingBottom(15)
+                .AlignCenter() // Center the subtitle
+                .Text($"Damage {_defect.DefectNo}")
+                .FontSize(12).Bold().FontColor("#4CAF50"); // Green for secondary heading
 
             // ── DYNAMIC IMAGE CONTAINER ──
-            // Notice: No fixed Height(). FitWidth() forces the image to perfectly
-            // span the page margins, naturally adjusting its height with zero blank space.
-            col.Item().PaddingBottom(20).Element(c =>
+            col.Item().PaddingBottom(20).AlignCenter().Element(c =>
             {
                 if (_imageBytes != null)
                 {
                     byte[] croppedBytes = CropAndAnnotate(_imageBytes, _defect.Anomaly) ?? _imageBytes;
-                    //c.Image(croppedBytes).FitWidth();
                     c.MinHeight(200).MaxHeight(250).AlignCenter().AlignMiddle().Image(croppedBytes, ImageScaling.FitArea);
-
-                    // c.AlignCenter().AlignMiddle().AspectRatio(1.0f).Image(croppedBytes, ImageScaling.FitWidth);
                 }
-
                 else
                 {
                     c.Height(200).Background("#EEEEEE").AlignCenter().AlignMiddle().Text("Image Not Available").Italic();
                 }
             });
 
-            // ── MINIMALIST TABLE ──
-            col.Item().Table(table =>
+            // ── CENTERED TABLE ──
+            col.Item().AlignCenter().Table(table =>
             {
-                table.ColumnsDefinition(cols => { cols.ConstantColumn(160); cols.RelativeColumn(); });
+                table.ColumnsDefinition(cols =>
+                {
+                    cols.ConstantColumn(160); // Label column
+                    cols.RelativeColumn();    // Value column
+                });
 
                 void Row(string lbl, string val)
                 {
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").PaddingVertical(8).Text(lbl).Bold().FontSize(9).FontColor("#333333");
-                    table.Cell().BorderBottom(1).BorderColor("#EEEEEE").PaddingVertical(8).Text(string.IsNullOrWhiteSpace(val) ? "None" : val).FontSize(9).FontColor("#555555");
+                    table.Cell().Border(2) // Increase border thickness
+                        .BorderColor("#CCCCCC") // Slightly darker border color
+                        .Padding(8)
+                        .AlignCenter()
+                        .Text(lbl).Bold().FontSize(10).FontColor("#000000"); // Black and bold for header
+                    table.Cell().Border(2) // Increase border thickness
+                        .BorderColor("#CCCCCC") // Slightly darker border color
+                        .Padding(8)
+                        .AlignCenter()
+                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val).FontSize(10).FontColor("#000000");
                 }
 
                 Row("Blade", _bladeSerial);
@@ -67,7 +80,7 @@ internal sealed class DefectDetailComponent
                 Row("Material", "Auxiliary Component");
                 Row("Type", _defect.Anomaly.GetDefectTypeDisplay() ?? "Leading Edge Protection");
                 Row("Subtype", _defect.Anomaly.Recommendation ?? "None");
-                Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—"); // Ensure HeightCm is displayed
+                Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
                 Row("Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
                 Row("Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
                 Row("Severity", _defect.Anomaly.Severity.ToString());

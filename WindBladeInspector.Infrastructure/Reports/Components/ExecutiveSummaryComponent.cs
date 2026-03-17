@@ -53,7 +53,7 @@ internal sealed class ExecutiveSummaryComponent
                 // ── Blade condition table ──────────────────────────────────────────
                 inner.Item().PaddingBottom(8)
                     .Text("Blade Condition Overview")
-                    .FontSize(13).FontColor(NavyHex).Bold();
+                    .FontSize(13).Bold().FontColor("#000000"); // Black and bold
 
                 inner.Item().Table(table =>
                 {
@@ -68,8 +68,8 @@ internal sealed class ExecutiveSummaryComponent
 
                     // Header
                     void HeaderCell(string text) =>
-                        table.Cell().Background(NavyHex).Padding(8)
-                            .Text(text).FontSize(10).FontColor(WhiteHex).Bold();
+                        table.Cell().Background("#F5F5F5").Padding(8)
+                            .Text(text).FontSize(10).FontColor("#000000").Bold(); // Black and bold
 
                     HeaderCell("Blade");
                     HeaderCell("Serial");
