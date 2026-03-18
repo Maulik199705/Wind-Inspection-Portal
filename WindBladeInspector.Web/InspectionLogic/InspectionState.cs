@@ -30,4 +30,8 @@ public class InspectionState
     public int CurrentCanvasBoxIndex { get; set; }
 
     public object? DotNetRef { get; set; }
+
+    // Collapsible panel state
+    public bool IsLeftPanelCollapsed { get; set; } = false;
+    public bool IsRightPanelCollapsed { get; set; } = false;
 }

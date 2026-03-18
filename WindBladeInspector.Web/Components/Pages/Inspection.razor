@@ -1,34 +1,11 @@
-/@* / CONTEXT FOR COPILOT:
-//
+@* CONTEXT FOR COPILOT:
 // This Blazor page is too large and needs architectural refactoring.
 // Goal:
 // - Split into multiple Razor components
 // - Extract state into InspectionState.cs
 // - Move business logic into controllers/services
 // - Keep behavior IDENTICAL
-//
-// Target structure:
-//
-// /Pages/Inspection.razor (layout only)
-//
-// /Components/Inspection/
-//   BladeSidebar.razor
-//   ImageNavigator.razor
-//   CanvasViewer.razor
-//   DefectEditor.razor
-//   VisualControls.razor
-//
-// /InspectionLogic/
-//   InspectionState.cs
-//   BladeController.cs
-//   ImageController.cs
-//   AnomalyController.cs
-//   ReportService.cs
-//
-// Follow SRP strictly. UI components must NOT contain business logic. *@
-
-
-
+*@
 
 @page "/inspection"
 @page "/inspection/{ProjectId:guid}"
@@ -61,126 +38,134 @@
         </h1>
         <div class="header-nav">
             <span style="color: var(--text-muted); margin-right: 1rem;">@(State.Project?.Model ?? "")</span>
-            <button class="btn btn-secondary btn-sm" @onclick="NavigateBack">
-                ← Back to Dashboard
-            </button>
+            <button class="btn btn-secondary btn-sm" @onclick="NavigateBack">← Back to Dashboard</button>
         </div>
     </header>
 
-    <div class="inspection-layout">
-        <!-- LEFT SIDEBAR: Blade Navigation -->
-        <div class="blade-schematic-panel">
-            <div class="panel-title">Blade Inspection</div>
-            
-            <!-- Blade Selector -->
-            <div class="blade-selector">
-                @if (State.Project!= null)
-                {
-                    @foreach (var blade in State.Project.Blades)
+    <div class="inspection-layout @(State.IsLeftPanelCollapsed ? "left-collapsed" : "") @(State.IsRightPanelCollapsed ? "right-collapsed" : "")">
+
+        <!-- ═══ LEFT SIDEBAR ═══ -->
+        <div class="blade-schematic-panel @(State.IsLeftPanelCollapsed ? "collapsed" : "")">
+            <!-- 
+                CRITICAL: The collapse toggle button lives OUTSIDE .panel-content
+                so it is always visible even when the panel is collapsed.
+            -->
+            <button class="panel-collapse-btn left-collapse-btn"
+                    @onclick="ToggleLeftPanel"
+                    title="@(State.IsLeftPanelCollapsed ? "Expand" : "Collapse") Navigation">
+                @(State.IsLeftPanelCollapsed ? "▶" : "◀")
+            </button>
+
+            <div class="panel-content">
+                <div class="panel-title">Blade Inspection</div>
+
+                <!-- Blade Selector -->
+                <div class="blade-selector">
+                    @if (State.Project != null)
                     {
-                        <button class="blade-selector-btn @( State.SelectedBlade?.Id == blade.Id ? "active" : "")"
-                                @onclick="() => SelectBlade(blade)">
-                            @blade.SerialNumber
-                        </button>
-                    }
-                }
-            </div>
-            
-            <!-- View/Side Selector -->
-            @if ( State.SelectedBlade != null)
-            {
-                <div class="nav-section" style="margin-top: 1rem;">
-                    <div class="nav-title">Blade Views</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                        @foreach (var view in new[] { "PS", "SS", "LE", "TE" })
+                        @foreach (var blade in State.Project.Blades)
                         {
-                            var bladeView =  State.SelectedBlade.Views.FirstOrDefault(v => v.Side == view);
-                            var imageCount = bladeView?.Images.Count ?? 0;
-                            <button class="view-selector-btn @(State.SelectedView == view ? "active" : "")"
-                                    @onclick="() => SelectView(view)"
-                                    style="flex: 1; min-width: 40%; position: relative;">
-                                <span>@GetViewLabel(view)</span>
-                                @if (imageCount > 0)
-                                {
-                                    <span style="font-size: 0.7rem; display: block; color: #0f0;">@imageCount img</span>
-                                }
+                            <button class="blade-selector-btn @(State.SelectedBlade?.Id == blade.Id ? "active" : "")"
+                                    @onclick="() => SelectBlade(blade)">
+                                @blade.SerialNumber
                             </button>
                         }
-                    </div>
+                    }
                 </div>
-            }
 
-            <!-- Upload Button -->
-            <div class="nav-section" style="margin-top: 1rem;">
-                <label class="btn-upload-full" for="bulkFileInput">
-                    <span style="font-size: 1.2rem;">+</span> Upload Images for @State.SelectedView
-                </label>
-                <InputFile OnChange="HandleBulkFileUpload" multiple style="display: none;" id="bulkFileInput" accept=".jpg,.jpeg,.png,.webp" />
-            </div>
-
-            @* Update the defect summary list to filter by current view *@
-<div class="nav-section" style="margin-top: 1rem; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
-    <div class="nav-title">Defect Summary (@State.SelectedView)</div>
-    <div class="anomaly-list" style="overflow-y: auto;">
-        @if (State.SelectedBlade != null && State.SelectedBlade.Anomalies.Any())
-        {
-            var filteredAnomalies = State.SelectedBlade.Anomalies
-                .Where(a => a.BladeSide == State.SelectedView)
-                .OrderByDescending(a => a.Severity)
-                .ToList();
-            
-            @if (filteredAnomalies.Any())
-            {
-                foreach (var anomaly in filteredAnomalies)
+                <!-- View/Side Selector -->
+                @if (State.SelectedBlade != null)
                 {
-                    <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
-                         @onclick="() => SelectAnomaly(anomaly)"    
-                         title="@anomaly.GetDefectTypeDisplay()">
-                        <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
-                        <div class="anomaly-list-info">
-                            <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
-                            <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
+                    <div class="nav-section" style="margin-top: 1rem;">
+                        <div class="nav-title">Blade Views</div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                            @foreach (var view in new[] { "PS", "SS", "LE", "TE" })
+                            {
+                                var bladeView = State.SelectedBlade.Views.FirstOrDefault(v => v.Side == view);
+                                var imageCount = bladeView?.Images.Count ?? 0;
+                                <button class="view-selector-btn @(State.SelectedView == view ? "active" : "")"
+                                        @onclick="() => SelectView(view)"
+                                        style="flex: 1; min-width: 40%; position: relative;">
+                                    <span>@GetViewLabel(view)</span>
+                                    @if (imageCount > 0)
+                                    {
+                                        <span style="font-size: 0.7rem; display: block; color: #0f0;">@imageCount img</span>
+                                    }
+                                </button>
+                            }
                         </div>
                     </div>
                 }
-            }
-            else
-            {
-                <div class="empty-state-text">No defects in @State.SelectedView view</div>
-            }
-        }
-        else
-        {
-            <div class="empty-state-text">No defects recorded</div>
-        }
-    </div>
-  </div>
-</div>
-        
-        <!-- CENTER PANEL (Header + Canvas) -->
-        <div class="center-panel" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-            <!-- Top Image Navigation Bar -->
+
+                <!-- Upload -->
+                <div class="nav-section" style="margin-top: 1rem;">
+                    <label class="btn-upload-full" for="bulkFileInput">
+                        <span style="font-size: 1.2rem;">+</span> Upload Images for @State.SelectedView
+                    </label>
+                    <InputFile OnChange="HandleBulkFileUpload" multiple style="display: none;" id="bulkFileInput" accept=".jpg,.jpeg,.png,.webp" />
+                </div>
+
+                <!-- Defect Summary -->
+                <div class="nav-section" style="margin-top: 1rem; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                    <div class="nav-title">Defect Summary (@State.SelectedView)</div>
+                    <div class="anomaly-list" style="overflow-y: auto;">
+                        @if (State.SelectedBlade != null && State.SelectedBlade.Anomalies.Any())
+                        {
+                            var filtered = State.SelectedBlade.Anomalies
+                                .Where(a => a.BladeSide == State.SelectedView)
+                                .OrderByDescending(a => a.Severity)
+                                .ToList();
+
+                            @if (filtered.Any())
+                            {
+                                foreach (var anomaly in filtered)
+                                {
+                                    <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
+                                         @onclick="() => SelectAnomaly(anomaly)"
+                                         title="@anomaly.GetDefectTypeDisplay()">
+                                        <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
+                                        <div class="anomaly-list-info">
+                                            <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
+                                            <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="empty-state-text">No defects in @State.SelectedView view</div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty-state-text">No defects recorded</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ CENTER PANEL ═══ -->
+        <div class="center-panel">
+            <!-- Image Navigation Bar -->
             <div class="image-navigation-bar">
                 <div class="image-nav-content">
-                    <button class="nav-arrow-btn" @onclick="PrevImage" disabled="@(!CanNavigatePrev())" title="Previous Image (Left Arrow)">
-                        ❮
-                    </button>
-                    
+                    <button class="nav-arrow-btn" @onclick="PrevImage" disabled="@(!CanNavigatePrev())" title="Previous Image">❮</button>
+
                     <div class="image-number-list">
                         @if (State.SelectedViewImages.Count > 0)
                         {
                             @for (int i = 0; i < State.SelectedViewImages.Count; i++)
                             {
-                                var img = State.SelectedViewImages[i];
-                                var index = i;
-                                var isActive = State.SelectedImage?.Id == img.Id;
+                                var img        = State.SelectedViewImages[i];
+                                var index      = i;
+                                var isActive   = State.SelectedImage?.Id == img.Id;
                                 var hasDefects = img.Anomalies.Any();
-                                
-                               <button class="image-number-btn @(isActive ? "active" : "") @(hasDefects ? "has-defects" : "")"
+                                <button class="image-number-btn @(isActive ? "active" : "") @(hasDefects ? "has-defects" : "")"
                                         @onclick="() => SelectImageDirect(img)"
                                         title="@($"Image {index + 1}{(hasDefects ? $" ({img.Anomalies.Count} defects)" : "")}")">
-                                        @(index + 1)
-                               </button>
+                                    @(index + 1)
+                                </button>
                             }
                         }
                         else
@@ -188,70 +173,51 @@
                             <span style="color: #666; font-size: 0.85rem; padding: 0 15px;">No images for @State.SelectedView</span>
                         }
                     </div>
-                    
-                    <button class="nav-arrow-btn" @onclick="NextImage" disabled="@(!CanNavigateNext())" title="Next Image (Right Arrow)">
-                        ❯
-                    </button>
-                    
+
+                    <button class="nav-arrow-btn" @onclick="NextImage" disabled="@(!CanNavigateNext())" title="Next Image">❯</button>
+
                     <div class="image-info-compact">
                         @if (State.SelectedImage != null)
                         {
-                            <span>Image @(State.SelectedImage.SequenceOrder + 1) of @State.SelectedViewImages.Count</span>
+                            <span>@(State.SelectedImage.SequenceOrder + 1) / @State.SelectedViewImages.Count</span>
                             @if (State.SelectedImage.Anomalies.Any())
                             {
                                 <span class="defect-count-badge">@State.SelectedImage.Anomalies.Count defects</span>
                             }
                         }
                     </div>
-                    
-                    <button class="btn-delete-image" @onclick="DeleteCurrentImage" disabled="@(State.SelectedImage == null)" title="Delete Current Image">
-                        🗑️
-                    </button>
+
+                    <button class="btn-delete-image" @onclick="DeleteCurrentImage" disabled="@(State.SelectedImage == null)" title="Delete Image">🗑️</button>
                 </div>
             </div>
-            
-            <!-- Top Header / Controls -->
+
+            <!-- Inspection Header / Controls -->
             <div class="inspection-header">
                 <div class="blade-info">
-                    <span class="blade-id">@( State.SelectedBlade?.SerialNumber ?? "No Blade")</span>
-                    <span class="project-info">@State.SelectedView - @GetViewLabel(State.SelectedView)</span>
+                    <span class="blade-id">@(State.SelectedBlade?.SerialNumber ?? "—")</span>
+                    <span class="project-info">@State.SelectedView – @GetViewLabel(State.SelectedView)</span>
                 </div>
-                
                 <div class="canvas-controls">
-                    <button class="btn-icon" @onclick="ZoomIn" title="Zoom In">+</button>
-                    <span class="zoom-level">@(State.ZoomLevel.ToString("0.0"))x</span>
-                    <button class="btn-icon" @onclick="ZoomOut" title="Zoom Out">-</button>
-                    <button class="btn-icon" @onclick="ResetView" title="Reset View">⟲</button>
+                    <button class="btn-icon" @onclick="ZoomIn"    title="Zoom In (+)">+</button>
+                    <span class="zoom-level">@((State.ZoomLevel * 100).ToString("F0"))%</span>
+                    <button class="btn-icon" @onclick="ZoomOut"   title="Zoom Out (-)">−</button>
+                    <button class="btn-icon" @onclick="ResetView" title="Fit to Screen">⊡</button>
                     <div class="divider"></div>
-                    <!-- Maximize Button -->
-                    <button class="btn-icon" @onclick="ToggleVisualMode" title="Maximize View">
-                        @if (State.IsVisualMode) { <span>✕</span> } else { <span>⛶</span> }
+                    <!-- Fullscreen button — always rendered, toggles visual-mode class on app-container -->
+                    <button class="btn-icon btn-fullscreen" @onclick="ToggleVisualMode"
+                            title="@(State.IsVisualMode ? "Exit Fullscreen (Esc)" : "Fullscreen")">
+                        @(State.IsVisualMode ? "✕" : "⛶")
                     </button>
                 </div>
             </div>
 
-            <div class="main-content" style="flex: 1; position: relative; overflow: hidden;">
-                <!-- Center Canvas Area -->
-                <div class="canvas-panel" style="width: 100%; height: 100%;">
-                    <div class="canvas-toolbar">
-                        <div class="toolbar-group">
-                            <!-- Zoom Controls Only -->
-                            <button class="btn btn-icon btn-secondary" @onclick="ZoomOut" title="Zoom Out"> - </button>
-                            <span class="zoom-display">@((State.ZoomLevel * 100).ToString("F0"))%</span>
-                            <button class="btn btn-icon btn-secondary" @onclick="ZoomIn" title="Zoom In"> + </button>
-                        </div>
-                        
-                        <div class="toolbar-group">
-                            <span class="mode-indicator inspect">
-                                @( State.SelectedBlade?.SerialNumber ?? "-") / @(State.SelectedView ?? "-") / @(State.SelectedImage?.SequenceOrder + 1 ?? 0)
-                            </span>
-                        </div>
-                    </div>
-
+            <!-- ── Canvas Area ── -->
+            <div class="main-content">
+                <div class="canvas-panel">
                     <div class="canvas-container-wrapper" id="canvasViewer">
                         @if (string.IsNullOrEmpty(State.ImageUrl))
                         {
-                            <div class="empty-state" style="width: 100%;">
+                            <div class="empty-state">
                                 <svg class="empty-state-icon" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                                 </svg>
@@ -268,727 +234,860 @@
                         }
                     </div>
                 </div>
+
+                <!-- ── INLINE DEFECT ANNOTATION PANEL ── -->
+                @if (State.CurrentAnomaly != null)
+                {
+                    <div class="inline-defect-panel">
+                        <div class="inline-defect-header">
+                            <span class="inline-defect-title">🎯 New Defect</span>
+                            <button class="inline-close-btn" @onclick="CancelDefect" title="Cancel">✕</button>
+                        </div>
+
+                        <div class="inline-dims">
+                            <div class="dim-item">
+                                <span class="dim-label">W</span>
+                                <span class="dim-value">@State.CurrentWidthPx.ToString("F0")px</span>
+                                <span class="dim-pct">(@State.CurrentWidthPct.ToString("F1")%)</span>
+                            </div>
+                            <div class="dim-item">
+                                <span class="dim-label">H</span>
+                                <span class="dim-value">@State.CurrentHeightPx.ToString("F0")px</span>
+                                <span class="dim-pct">(@State.CurrentHeightPct.ToString("F1")%)</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Severity</label>
+                            <select class="form-select" @bind="State.CurrentAnomaly.Severity">
+                                <option value="1">1 – Cosmetic</option>
+                                <option value="2">2 – Minor</option>
+                                <option value="3">3 – Medium</option>
+                                <option value="4">4 – Serious</option>
+                                <option value="5">5 – Very Serious</option>
+                            </select>
+                        </div>
+
+                        <DefectClassificationSelector
+                            Classification="@State.CurrentAnomaly.Classification"
+                            ClassificationChanged="@OnCurrentDefectClassificationChanged" />
+
+                        <div class="form-group">
+                            <label class="form-label">Blade Side</label>
+                            <div class="readonly-field">@State.SelectedView – @GetViewLabel(State.SelectedView)</div>
+                        </div>
+
+                        <div class="inline-defect-actions">
+                            <button class="btn btn-primary" @onclick="SaveAnomaly">✔ Save Defect</button>
+                            <button class="btn btn-danger"  @onclick="CancelDefect">✕ Cancel</button>
+                        </div>
+                    </div>
+                }
             </div>
         </div>
 
-        <!-- RIGHT SIDEBAR: Actions -->
-        <div class="damage-details-panel">
-            <div class="panel-header-row">
-                 <div class="panel-title">Defect Entry</div>
-            </div>
-            <div style="background: #1a2332; border: 1px solid #0f0; border-radius: 4px; padding: 12px; margin-bottom: 15px;">
-            <div style="font-size: 0.85rem; color: #0f0; font-weight: bold; margin-bottom: 8px;">
-                🎯 Quick Actions
-            </div>
+        <!-- ═══ RIGHT SIDEBAR ═══ -->
+        <div class="damage-details-panel @(State.IsRightPanelCollapsed ? "collapsed" : "")">
+            <!--
+                CRITICAL: The collapse toggle button lives OUTSIDE .panel-content
+                so it is always visible even when the panel is collapsed.
+            -->
+            <button class="panel-collapse-btn right-collapse-btn"
+                    @onclick="ToggleRightPanel"
+                    title="@(State.IsRightPanelCollapsed ? "Expand" : "Collapse") Details">
+                @(State.IsRightPanelCollapsed ? "◀" : "▶")
+            </button>
 
-           <div style="font-size: 0.75rem; color: #aaa; line-height: 1.6;">
-                <div style="margin-bottom: 5px;">• <strong>Click</strong> box to select</div>
-                <div style="margin-bottom: 5px;">• <strong>Delete/Backspace</strong> key to remove</div>
-                <div style="margin-bottom: 5px;">• <strong>Right-click</strong> box for menu</div>
-                <div style="margin-bottom: 5px;">• <strong>Hover</strong> for delete button</div>
-                <div>• <strong>ESC</strong> to deselect/cancel</div>
-            </div>
-          </div>
-
-            <!-- Global Actions -->
-            <div class="action-buttons" style="display: flex; gap: 10px; margin-bottom: 20px;">
-                <button class="btn btn-primary" @onclick="GenerateReport"
-                        disabled="@_isGeneratingReport" style="flex: 1;">
-                    @(_isGeneratingReport ? "⏳ Generating..." : "📄 Report")
-                </button>
-            </div>
-
-            <!-- Current Defect Form (Always Visible when drawing) -->
-            @if (State.CurrentAnomaly != null)
-            {
-                <div class="panel-title" style="margin-top: 0; margin-bottom: 1rem;">New Defect</div>
-                
-                <!-- Defect Dimensions Display -->
-                <div class="form-group" style="margin-bottom: 15px; background: #1a1a1a; padding: 10px; border-radius: 4px;">
-                    <label class="form-label" style="display:block; margin-bottom:5px; color:#0f0; font-size: 0.9rem;">Defect Dimensions</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
-                        <div>
-                            <span style="color: #aaa;">Width: </span>
-                            <span style="color: #0f0; font-weight: bold;">@State.CurrentWidthPx.ToString("F0") px</span>
-                            <br />
-                            <span style="color: #aaa; font-size: 0.75rem;">(@State.CurrentWidthPct.ToString("F1")% of image)</span>
-                        </div>
-                        <div>
-                            <span style="color: #aaa;">Height: </span>
-                            <span style="color: #0f0; font-weight: bold;">@State.CurrentHeightPx.ToString("F0") px</span>
-                            <br />
-                            <span style="color: #aaa; font-size: 0.75rem;">(@State.CurrentHeightPct.ToString("F1")% of image)</span>
-                        </div>
+            <div class="panel-content">
+                <!-- Quick Actions hint -->
+                <div class="quick-actions-hint">
+                    <div class="hint-title">🎯 Quick Actions</div>
+                    <div class="hint-body">
+                        <div>• <strong>Click</strong> image to place point</div>
+                        <div>• <strong>4 clicks</strong> = draw defect box</div>
+                        <div>• <strong>Delete/Backspace</strong> = remove selected</div>
+                        <div>• <strong>Right-click</strong> box for options</div>
+                        <div>• <strong>ESC</strong> to cancel / deselect</div>
+                        <div>• <strong>Scroll</strong> to zoom, Alt+drag to pan</div>
                     </div>
                 </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Severity (1-5)</label>
-                    <select class="form-select" @bind="State.CurrentAnomaly.Severity">
-                        <option value="1">1 - Cosmetic</option>
-                        <option value="2">2 - Minor</option>
-                        <option value="3">3 - Medium</option>
-                        <option value="4">4 - Serious</option>
-                        <option value="5">5 - Very Serious</option>
-                    </select>
-                </div>
-                
-                <!-- Replace simple dropdown with DefectClassificationSelector -->
-                <DefectClassificationSelector 
-                    Classification="@State.CurrentAnomaly.Classification" 
-                    ClassificationChanged="@OnCurrentDefectClassificationChanged" />
-                
-                <!-- Display current blade side (read-only) -->
-                <div class="form-group">
-                    <label class="form-label">Blade Side</label>
-                    <div style="background: #2a2a2a; padding: 10px; border-radius: 4px; color: #0f0; font-weight: bold;">
-                        @State.SelectedView - @GetViewLabel(State.SelectedView)
-                    </div>
-                </div>
-                
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button class="btn btn-primary" @onclick="SaveAnomaly" style="flex: 1;">Save Defect</button>
-                    <button class="btn btn-secondary" @onclick="CancelDefect" style="flex: 1; background: #442222; border-color: #663333;">Cancel</button>
-                </div>
-            }
-            else
-            {
-                <div style="padding: 20px; text-align: center; color: var(--text-muted); border: 2px dashed #444; border-radius: 4px; margin-top: 1rem;">
-                    <p style="margin: 0; font-size: 0.9rem;">✏️ Draw a box on the image to add a defect</p>
-                </div>
-            }
 
-            <div class="panel-title" style="margin-top: 1.5rem;">Image Details</div>
-             @if (State.SelectedImage != null)
-             {
-                 <div class="image-info-card">
-                     <div class="info-row">
-                         <span class="info-label">View</span>
-                         <span class="info-value">@State.SelectedView</span>
-                     </div>
-                     <div class="info-row">
-                         <span class="info-label">Image #</span>
-                         <span class="info-value">@(State.SelectedImage.SequenceOrder + 1)</span>
-                     </div>
-                     <div class="info-row">
-                         <span class="info-label">Defects</span>
-                         <span class="info-value">@State.SelectedImage.Anomalies.Count</span>
-                     </div>
-                 </div>
-             }
-             else
-             {
-                 <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">No image selected</p>
-             }
-
-            <div class="panel-title" style="margin-top: 1.5rem;">Saved Defects</div>
-            
-            @if (State.SelectedAnomaly != null)
-            {
-                <div class="damage-form">
-                    <div class="form-group">
-                        <label class="form-label">Severity (1-5)</label>
-                        <select class="form-select" @bind="State.SelectedAnomaly.Severity">
-                            <option value="1">1 - Cosmetic</option>
-                            <option value="2">2 - Minor</option>
-                            <option value="3">3 - Medium</option>
-                            <option value="4">4 - Serious</option>
-                            <option value="5">5 - Very Serious</option>
-                        </select>
-                    </div>
-                    
-                    <!-- Replace simple dropdown with DefectClassificationSelector -->
-                    <DefectClassificationSelector 
-                        Classification="@State.SelectedAnomaly.Classification" 
-                        ClassificationChanged="@OnSelectedDefectClassificationChanged" />
-                    
-                    <div class="form-group">
-                        <label class="form-label">Blade Side</label>
-                        <select class="form-select" @bind="State.SelectedAnomaly.BladeSide">
-                            <option value="PS">Pressure Side</option>
-                            <option value="SS">Suction Side</option>
-                            <option value="LE">Leading Edge</option>
-                            <option value="TE">Trailing Edge</option>
-                        </select>
-                    </div>
-                    
-                    <button class="btn btn-primary btn-block" @onclick="SaveAnomaly">
-                        Update Defect
-                    </button>
-                    <button class="btn btn-secondary btn-block" @onclick="DeleteAnomaly" style="margin-top: 5px; background: #442222; border-color: #663333;">
-                        Delete
+                <!-- Report -->
+                <div style="margin-bottom: 1rem;">
+                    <button class="btn btn-primary" @onclick="GenerateReport"
+                            disabled="@_isGeneratingReport" style="width: 100%;">
+                        @(_isGeneratingReport ? "⏳ Generating…" : "📄 Generate Report")
                     </button>
                 </div>
-            }
-            else if (State.CurrentAnomaly == null)
-            {
-                <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem;">
-                    Select a saved defect to edit
-                </p>
-            }
+
+                <!-- Image Details -->
+                <div class="collapsible-section">
+                    <button class="collapsible-header" @onclick="() => _imageDetailsOpen = !_imageDetailsOpen">
+                        <span>Image Details</span>
+                        <span class="chevron">@(_imageDetailsOpen ? "▲" : "▼")</span>
+                    </button>
+                    @if (_imageDetailsOpen)
+                    {
+                        <div class="collapsible-body">
+                            @if (State.SelectedImage != null)
+                            {
+                                <div class="image-info-card">
+                                    <div class="info-row"><span class="info-label">View</span><span class="info-value">@State.SelectedView</span></div>
+                                    <div class="info-row"><span class="info-label">Image #</span><span class="info-value">@(State.SelectedImage.SequenceOrder + 1)</span></div>
+                                    <div class="info-row"><span class="info-label">Defects</span><span class="info-value">@State.SelectedImage.Anomalies.Count</span></div>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="empty-state-text">No image selected</p>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <!-- Saved Defects / Edit -->
+                <div class="collapsible-section">
+                    <button class="collapsible-header" @onclick="() => _savedDefectsOpen = !_savedDefectsOpen">
+                        <span>Defect Annotation</span>
+                        <span class="chevron">@(_savedDefectsOpen ? "▲" : "▼")</span>
+                    </button>
+                    @if (_savedDefectsOpen)
+                    {
+                        <div class="collapsible-body">
+                            @if (State.SelectedAnomaly != null)
+                            {
+                                <div class="damage-form">
+                                    <div class="form-group">
+                                        <label class="form-label">Severity (1–5)</label>
+                                        <select class="form-select" @bind="State.SelectedAnomaly.Severity">
+                                            <option value="1">1 – Cosmetic</option>
+                                            <option value="2">2 – Minor</option>
+                                            <option value="3">3 – Medium</option>
+                                            <option value="4">4 – Serious</option>
+                                            <option value="5">5 – Very Serious</option>
+                                        </select>
+                                    </div>
+                                    <DefectClassificationSelector
+                                        Classification="@State.SelectedAnomaly.Classification"
+                                        ClassificationChanged="@OnSelectedDefectClassificationChanged" />
+                                    <div class="form-group">
+                                        <label class="form-label">Blade Side</label>
+                                        <select class="form-select" @bind="State.SelectedAnomaly.BladeSide">
+                                            <option value="PS">Pressure Side</option>
+                                            <option value="SS">Suction Side</option>
+                                            <option value="LE">Leading Edge</option>
+                                            <option value="TE">Trailing Edge</option>
+                                        </select>
+                                    </div>
+                                    <button class="btn btn-primary btn-block" @onclick="SaveAnomaly">Update Defect</button>
+                                    <button class="btn btn-block" @onclick="DeleteAnomaly"
+                                            style="margin-top: 5px; background: #442222; border-color: #663333; color: #ff9999;">
+                                        Delete Defect
+                                    </button>
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="empty-state-text" style="padding: 1rem;">Select a saved defect on the canvas to edit it</p>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
+<!-- ── Visual Mode overlay — floating controls always rendered, shown via CSS only in visual-mode ── -->
+<div class="visual-controls">
+    <button class="floating-btn" @onclick="PrevImage"         title="Previous">❮</button>
+    <button class="floating-btn" @onclick="ZoomOut"           title="Zoom Out">−</button>
+    <button class="floating-btn primary" @onclick="ToggleVisualMode" title="Exit Fullscreen">✕ Exit</button>
+    <button class="floating-btn" @onclick="ZoomIn"            title="Zoom In">+</button>
+    <button class="floating-btn" @onclick="NextImage"         title="Next">❯</button>
+</div>
+
 <style>
-    /* Full-screen Inspection Styles - 3 Column Grid */
-    .inspection-layout {
-        display: grid;
-        grid-template-columns: 250px 1fr 300px;
-        height: calc(100vh - 60px); /* Adjust for header */
-        overflow: hidden;
-    }
-    
-    .blade-schematic-panel {
-        /* Fixed left sidebar */
-        width: 250px;
-        background: #1e1e1e;
-        z-index: 10;
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-        padding: 15px;
-    }
-    
-    .canvas-panel {
-        position: relative;
-        background: #0d0d0d;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    }
-    
-    .damage-details-panel {
-        width: 300px;
-        background: #1e1e1e;
-        overflow-y: auto;
-        padding: 15px;
-    }
-    
-    .canvas-container-wrapper {
-        flex: 1;
-        overflow: hidden;
-        position: relative;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: #0d0d0d;
-    }
-    
-    .canvas-container {
-        transform-origin: 0 0; 
-        box-shadow: 0 0 50px rgba(0,0,0,0.5);
-    }
+/* ═══════════════════════════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════════════════════════ */
+.inspection-layout {
+    display: grid;
+    grid-template-columns: 250px 1fr 300px;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+    transition: grid-template-columns 0.25s ease;
+}
+.inspection-layout.left-collapsed                       { grid-template-columns: 36px 1fr 300px; }
+.inspection-layout.right-collapsed                      { grid-template-columns: 250px 1fr 36px; }
+.inspection-layout.left-collapsed.right-collapsed       { grid-template-columns: 36px 1fr 36px; }
 
-    /* Top Image Navigation Bar */
-    .image-navigation-bar {
-        background: #1a1a1a;
-        border-bottom: 2px solid #0f0;
-        padding: 10px 15px;
-        display: flex;
-        align-items: center;
-        min-height: 50px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    }
-    
-    .image-nav-content {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-    }
-    
-    .nav-arrow-btn {
-        background: #2a2a2a;
-        border: 2px solid #444;
-        color: #0f0;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1.2rem;
-        font-weight: bold;
-        transition: all 0.2s;
-        min-width: 50px;
-    }
-    
-    .nav-arrow-btn:hover:not(:disabled) {
-        background: #0f0;
-        color: #000;
-        border-color: #0f0;
-    }
-    
-    .nav-arrow-btn:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-    }
-    
-    .image-number-list {
-        display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
-        flex: 1;
-        align-items: center;
-        overflow-x: auto;
-        padding: 5px 0;
-    }
-    
-    .image-number-btn {
-        background: #2a2a2a;
-        border: 2px solid #444;
-        color: #aaa;
-        padding: 8px 14px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9rem;
-        font-weight: 600;
-        transition: all 0.2s;
-        min-width: 42px;
-        position: relative;
-    }
-    
-    .image-number-btn:hover {
-        background: #333;
-        border-color: #666;
-        color: #fff;
-        transform: translateY(-2px);
-    }
-    
-    .image-number-btn.active {
-        background: #0f0;
-        color: #000;
-        border-color: #0f0;
-        font-weight: bold;
-        box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-    }
-    
-    .image-number-btn.has-defects::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        right: 2px;
-        width: 6px;
-        height: 6px;
-        background: #ff4444;
-        border-radius: 50%;
-        box-shadow: 0 0 4px rgba(255, 68, 68, 0.8);
-    }
-    
-    .image-info-compact {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        color: #aaa;
-        font-size: 0.85rem;
-        white-space: nowrap;
-        padding: 0 10px;
-        border-left: 1px solid #444;
-    }
-    
-    .defect-count-badge {
-        background: #ff4444;
-        color: white;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 0.75rem;
-        font-weight: bold;
-    }
-    
-    .btn-delete-image {
-        background: #442222;
-        border: 2px solid #663333;
-        color: #ff6666;
-        padding: 8px 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 1rem;
-        transition: all 0.2s;
-    }
-    
-    .btn-delete-image:hover:not(:disabled) {
-        background: #663333;
-        border-color: #ff4444;
-        color: #fff;
-    }
-    
-    .btn-delete-image:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-    }
-
-    .btn-upload-full {
-        background: #0f0;
-        color: #000;
-        border: 2px solid #0f0;
-        padding: 12px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 600;
-        display: block;
-        text-align: center;
-        transition: all 0.2s;
-    }
-    
-    .btn-upload-full:hover {
-        background: #00cc00;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0, 255, 0, 0.3);
-    }
-
-    .view-selector-btn {
-        background: #2a2a2a;
-        border: 2px solid #444;
-        color: #aaa;
-        padding: 3px 5px;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-size: 0.65rem;
-        font-weight: 500;
-        min-width: 70px;
-        width: 100px;
-    }
-
-    .view-selector-btn:hover {
-        background: #333;
-        border-color: #666;
-        color: #fff;
-    }
-
-    .view-selector-btn.active {
-        background: #0f0;
-        color: #000;
-        border-color: #0f0;
-        font-weight: bold;
-    }
-    
-     /* Visual Mode Styles - FIXED */
-    .visual-mode {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: 9999;
-        background: #000;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .visual-mode .app-header, 
-    .visual-mode .blade-schematic-panel,
-    .visual-mode .damage-details-panel,
-    .visual-mode .inspection-header,
-    .visual-mode .canvas-toolbar,
-    .visual-mode .image-navigation-bar
-    {
-        display: none !important;
-    }
-
-    .visual-mode .center-panel {
-        width: 100%;
-        height: 100%;
-        flex: 1;
-    }
-
-    .visual-mode .main-content {
-        height: 100%;
-        width: 100%;
-    }
-
-    .visual-mode .canvas-container-wrapper {
-        width: 100vw;
-        height: 100vh;
-        background: #000;
-    }
-
-    .visual-controls {
-        display: none; 
-        position: fixed;
-        bottom: 30px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(20, 20, 20, 0.85);
-        backdrop-filter: blur(5px);
-        padding: 12px 25px;
-        border-radius: 50px;
-        gap: 20px;
-        z-index: 10001;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        border: 1px solid rgba(255,255,255,0.1);
-    }
-    
-    .visual-mode .visual-controls {
-        display: flex;
-    }
-</style>
-
-    <!-- Visual Mode Controls -->
-    <div class="visual-controls">
-        <button class="floating-btn" @onclick="PrevImage" title="Previous Image">❮</button>
-        <button class="floating-btn" @onclick="ZoomOut" title="Zoom Out">-</button>
-        <button class="floating-btn primary" @onclick="ToggleVisualMode" title="Exit Visual Mode">✕</button>
-        <button class="floating-btn" @onclick="ZoomIn" title="Zoom In">+</button>
-        <button class="floating-btn" @onclick="NextImage" title="Next Image">❯</button>
-    </div>
-    
-    @code {
-        [Parameter]
-        public Guid? ProjectId { get; set; }
-
-        protected override void OnInitialized()
-        {
-            if (ProjectId.HasValue)
-            {
-                State.Project= DashboardService.GetProjectById(ProjectId.Value);
-                if (State.Project!= null && State.Project.Blades.Count > 0)
-                {
-                    SelectBlade(State.Project.Blades[0]);
-                }
-            }
-        }
-        
-        protected override async Task OnAfterRenderAsync(bool firstRender)
-        {
-            if (firstRender)
-            {
-                State.DotNetRef = DotNetObjectReference.Create<object>(this);
-                await JSRuntime.InvokeVoidAsync("setupKeyboardNavigation", State.DotNetRef);
-            }
-        }
-
-        private void SelectBlade(Blade blade)
-        {
-            Logger.LogInformation("Blade selected: {BladeSerial}, View: {View}", blade.SerialNumber, State.SelectedView);
-             State.SelectedBlade = blade;
-            State.SelectedAnomaly = null;
-            State.SelectedView = "PS";
-            
-            if (!blade.Views.Any(v => v.Side == "PS")) blade.Views.Add(new BladeView { Side = "PS" });
-            if (!blade.Views.Any(v => v.Side == "SS")) blade.Views.Add(new BladeView { Side = "SS" });
-            if (!blade.Views.Any(v => v.Side == "LE")) blade.Views.Add(new BladeView { Side = "LE" });
-            if (!blade.Views.Any(v => v.Side == "TE")) blade.Views.Add(new BladeView { Side = "TE" });
-            
-            UpdateSelectedViewImages();
-            StateHasChanged();
-        }
-
-        private async void SelectView(string view)
-{
-    Logger.LogInformation("View changed to: {View}", view);
-    State.SelectedView = view;
-    State.SelectedImage = null;
-    State.ImageUrl = string.Empty;
-    State.IsCanvasInitialized = false;
-    State.CurrentAnomaly = null;
-    
-    // Clear canvas when switching views
-    try
-    {
-        await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
-    }
-    catch { /* Canvas might not be initialized yet */ }
-    
-    UpdateSelectedViewImages();
-    StateHasChanged();
+/* ═══════════════════════════════════════════════════════════════════
+   LEFT SIDEBAR
+   flex-direction: row  →  [panel-content] [toggle-button]
+   The toggle button is the LAST flex child (order:2) and always visible.
+═══════════════════════════════════════════════════════════════════ */
+.blade-schematic-panel {
+    background: #1e1e1e;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    border-right: 1px solid #2a2a2a;
+    position: relative;
 }
 
-        private void UpdateSelectedViewImages()
-        {
-            if ( State.SelectedBlade == null || string.IsNullOrEmpty(State.SelectedView))
-            {
-                State.SelectedViewImages = new();
-                return;
-            }
+/* panel-content fills remaining space and clips when collapsed */
+.blade-schematic-panel .panel-content {
+    flex: 1;
+    min-width: 0;           /* allow shrink below natural width */
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    transition: opacity 0.2s, visibility 0.2s;
+    visibility: visible;
+    opacity: 1;
+}
+.blade-schematic-panel.collapsed .panel-content {
+    opacity: 0;
+    visibility: hidden;     /* hidden keeps layout space but removes interaction */
+    overflow: hidden;
+    pointer-events: none;
+}
 
-            var view =  State.SelectedBlade.Views.FirstOrDefault(v => v.Side == State.SelectedView);
-            State.SelectedViewImages = view?.Images.OrderBy(i => i.SequenceOrder).ToList() ?? new();
+/* ═══════════════════════════════════════════════════════════════════
+   RIGHT SIDEBAR
+   flex-direction: row-reverse  →  [toggle-button] [panel-content]
+   The toggle button is the LAST flex child (order:2) and always visible.
+═══════════════════════════════════════════════════════════════════ */
+.damage-details-panel {
+    background: #1e1e1e;
+    display: flex;
+    flex-direction: row-reverse;
+    overflow: hidden;
+    border-left: 1px solid #2a2a2a;
+    position: relative;
+}
+
+.damage-details-panel .panel-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 15px;
+    transition: opacity 0.2s, visibility 0.2s;
+    visibility: visible;
+    opacity: 1;
+}
+.damage-details-panel.collapsed .panel-content {
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COLLAPSE TOGGLE BUTTONS
+   These are siblings of .panel-content, NOT children of it.
+   They are always rendered and always interactive.
+═══════════════════════════════════════════════════════════════════ */
+.panel-collapse-btn {
+    /* fixed 36px strip — the grid column minimum */
+    width: 36px;
+    min-width: 36px;
+    max-width: 36px;
+    flex-shrink: 0;
+    background: #1a1a1a;
+    border: none;
+    border-top: none;
+    border-bottom: none;
+    color: #0f0;
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, color 0.2s;
+    z-index: 10;
+}
+.panel-collapse-btn:hover { background: #252525; color: #fff; }
+
+/* Left panel: toggle sits on the RIGHT edge of the sidebar */
+.left-collapse-btn  { order: 2; border-left:  1px solid #333; }
+/* Right panel: toggle sits on the LEFT edge of the sidebar */
+.right-collapse-btn { order: 2; border-right: 1px solid #333; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CENTER PANEL
+═══════════════════════════════════════════════════════════════════ */
+.center-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #0d0d0d;
+    min-width: 0;
+}
+
+.main-content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.canvas-panel {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CANVAS WRAPPER / CONTAINER
+═══════════════════════════════════════════════════════════════════ */
+.canvas-container-wrapper {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background: #0d0d0d;
+    min-height: 0;
+}
+
+.canvas-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;  /* JS sets translate+scale */
+    line-height: 0;
+    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+}
+
+.canvas-container img  { display: block; }
+.canvas-container canvas {
+    display: block;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    cursor: crosshair;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EMPTY STATE
+═══════════════════════════════════════════════════════════════════ */
+.empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #555;
+    text-align: center;
+    padding: 2rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INLINE DEFECT ANNOTATION PANEL
+═══════════════════════════════════════════════════════════════════ */
+.inline-defect-panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 300px;
+    max-height: calc(100% - 24px);
+    overflow-y: auto;
+    background: rgba(16, 24, 36, 0.97);
+    border: 2px solid #0f0;
+    border-radius: 8px;
+    padding: 14px;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0,255,0,0.15), 0 2px 12px rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+}
+
+.inline-defect-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.inline-defect-title { font-size: 0.95rem; font-weight: bold; color: #0f0; }
+
+.inline-close-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #aaa;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+}
+.inline-close-btn:hover { background: #442222; border-color: #ff4444; color: #fff; }
+
+.inline-dims {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    background: #111;
+    padding: 8px 10px;
+    border-radius: 4px;
+}
+.dim-item  { display: flex; align-items: baseline; gap: 4px; }
+.dim-label { color: #666; font-size: 0.75rem; }
+.dim-value { color: #0f0; font-weight: bold; font-size: 0.85rem; }
+.dim-pct   { color: #555; font-size: 0.7rem; }
+
+.inline-defect-actions { display: flex; gap: 8px; margin-top: 12px; }
+.inline-defect-actions .btn { flex: 1; }
+.btn-danger             { background: #442222; border: 1px solid #663333; color: #ff9999; }
+.btn-danger:hover       { background: #663333; border-color: #ff4444; color: #fff; }
+
+.readonly-field {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: #0f0;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   COLLAPSIBLE SECTIONS (right panel accordion)
+═══════════════════════════════════════════════════════════════════ */
+.collapsible-section  { border: 1px solid #2a2a2a; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
+.collapsible-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #252525;
+    border: none;
+    color: #ccc;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-align: left;
+}
+.collapsible-header:hover { background: #2e2e2e; color: #0f0; }
+.chevron       { font-size: 0.7rem; color: #0f0; }
+.collapsible-body { padding: 10px; background: #1a1a1a; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   QUICK ACTIONS HINT
+═══════════════════════════════════════════════════════════════════ */
+.quick-actions-hint { background: #1a2332; border: 1px solid #0f0; border-radius: 4px; padding: 10px; margin-bottom: 12px; }
+.hint-title         { font-size: 0.8rem; color: #0f0; font-weight: bold; margin-bottom: 6px; }
+.hint-body          { font-size: 0.72rem; color: #aaa; line-height: 1.7; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   IMAGE NAVIGATION BAR
+═══════════════════════════════════════════════════════════════════ */
+.image-navigation-bar {
+    background: #1a1a1a;
+    border-bottom: 2px solid #0f0;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    flex-shrink: 0;
+}
+.image-nav-content { display: flex; align-items: center; gap: 8px; width: 100%; }
+
+.nav-arrow-btn {
+    background: #2a2a2a; border: 2px solid #444; color: #0f0;
+    padding: 6px 14px; border-radius: 4px; cursor: pointer;
+    font-size: 1.1rem; font-weight: bold; transition: all 0.2s; min-width: 44px;
+}
+.nav-arrow-btn:hover:not(:disabled) { background: #0f0; color: #000; border-color: #0f0; }
+.nav-arrow-btn:disabled             { opacity: 0.3; cursor: not-allowed; }
+
+.image-number-list {
+    display: flex; gap: 5px; flex-wrap: nowrap;
+    flex: 1; align-items: center; overflow-x: auto; padding: 2px 0;
+}
+
+.image-number-btn {
+    background: #2a2a2a; border: 2px solid #444; color: #aaa;
+    padding: 6px 12px; border-radius: 4px; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.2s;
+    min-width: 38px; position: relative; flex-shrink: 0;
+}
+.image-number-btn:hover   { background: #333; border-color: #666; color: #fff; }
+.image-number-btn.active  { background: #0f0; color: #000; border-color: #0f0; font-weight: bold; box-shadow: 0 0 8px rgba(0,255,0,0.4); }
+.image-number-btn.has-defects::after {
+    content: ''; position: absolute; top: 2px; right: 2px;
+    width: 6px; height: 6px; background: #ff4444; border-radius: 50%;
+    box-shadow: 0 0 4px rgba(255,68,68,0.8);
+}
+
+.image-info-compact {
+    display: flex; gap: 8px; align-items: center; color: #aaa;
+    font-size: 0.8rem; white-space: nowrap; padding: 0 8px; border-left: 1px solid #333;
+}
+.defect-count-badge { background: #ff4444; color: #fff; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: bold; }
+
+.btn-delete-image {
+    background: #442222; border: 2px solid #663333; color: #ff6666;
+    padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s;
+}
+.btn-delete-image:hover:not(:disabled) { background: #663333; border-color: #ff4444; color: #fff; }
+.btn-delete-image:disabled             { opacity: 0.3; cursor: not-allowed; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   INSPECTION HEADER
+═══════════════════════════════════════════════════════════════════ */
+.inspection-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 14px;
+    background: #141414;
+    border-bottom: 1px solid #222;
+    flex-shrink: 0;
+}
+.blade-info   { display: flex; gap: 12px; align-items: center; }
+.blade-id     { font-weight: bold; color: #0f0; font-size: 1rem; }
+.project-info { color: #666; font-size: 0.85rem; }
+
+.canvas-controls { display: flex; align-items: center; gap: 6px; }
+
+.btn-icon {
+    background: #2a2a2a; border: 1px solid #444; color: #ccc;
+    padding: 5px 10px; border-radius: 4px; cursor: pointer;
+    font-size: 0.9rem; transition: all 0.15s;
+}
+.btn-icon:hover        { background: #3a3a3a; color: #0f0; border-color: #0f0; }
+/* Give the fullscreen button a slightly more prominent look */
+.btn-fullscreen        { font-size: 1.1rem; padding: 4px 10px; }
+.btn-fullscreen:hover  { background: #0f0; color: #000; border-color: #0f0; }
+
+.zoom-level { color: #aaa; font-size: 0.8rem; min-width: 42px; text-align: center; }
+.divider    { width: 1px; height: 20px; background: #333; margin: 0 4px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   MISC SHARED
+═══════════════════════════════════════════════════════════════════ */
+.btn-upload-full {
+    background: #0f0; color: #000; border: 2px solid #0f0;
+    padding: 10px 14px; border-radius: 6px; cursor: pointer;
+    font-weight: 600; display: block; text-align: center; transition: all 0.2s;
+}
+.btn-upload-full:hover { background: #00cc00; box-shadow: 0 4px 8px rgba(0,255,0,0.3); }
+
+.view-selector-btn {
+    background: #2a2a2a; border: 2px solid #444; color: #aaa;
+    padding: 4px 6px; border-radius: 4px; cursor: pointer;
+    transition: all 0.2s; font-size: 0.65rem; font-weight: 500;
+}
+.view-selector-btn:hover  { background: #333; border-color: #666; color: #fff; }
+.view-selector-btn.active { background: #0f0; color: #000; border-color: #0f0; font-weight: bold; }
+
+.empty-state-text { color: #555; font-size: 0.8rem; text-align: center; padding: 8px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   FULLSCREEN / VISUAL MODE
+   The .visual-mode class is applied to .app-container.
+   It takes over the entire viewport and hides everything except the canvas.
+═══════════════════════════════════════════════════════════════════ */
+.visual-mode {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Hide chrome we don't need in fullscreen */
+.visual-mode .app-header          { display: none !important; }
+.visual-mode .blade-schematic-panel { display: none !important; }
+.visual-mode .damage-details-panel  { display: none !important; }
+.visual-mode .inspection-header     { display: none !important; }
+.visual-mode .image-navigation-bar  { display: none !important; }
+
+/* Force the grid to give the center column 100% */
+.visual-mode .inspection-layout {
+    display: flex !important;   /* override grid entirely */
+    height: 100vh;
+}
+
+/* Center column fills all available space */
+.visual-mode .center-panel {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.visual-mode .main-content {
+    flex: 1;
+    height: 100%;
+}
+
+/* The wrapper must fill the full viewport in fullscreen */
+.visual-mode .canvas-container-wrapper {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* ── Floating controls bar (only shown in visual-mode) ── */
+.visual-controls {
+    display: none;          /* hidden by default */
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(20,20,20,0.92);
+    backdrop-filter: blur(8px);
+    padding: 10px 24px;
+    border-radius: 50px;
+    gap: 16px;
+    z-index: 10001;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.12);
+    align-items: center;
+}
+.visual-mode .visual-controls { display: flex; }   /* show only in fullscreen */
+
+.floating-btn {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.floating-btn:hover         { background: rgba(255,255,255,0.22); }
+.floating-btn.primary       { background: rgba(0,255,0,0.15); border-color: #0f0; color: #0f0; }
+.floating-btn.primary:hover { background: rgba(0,255,0,0.3); }
+</style>
+
+@code {
+    [Parameter]
+    public Guid? ProjectId { get; set; }
+
+    private bool _imageDetailsOpen = true;
+    private bool _savedDefectsOpen = true;
+
+    protected override void OnInitialized()
+    {
+        if (ProjectId.HasValue)
+        {
+            State.Project = DashboardService.GetProjectById(ProjectId.Value);
+            if (State.Project != null && State.Project.Blades.Count > 0)
+                SelectBlade(State.Project.Blades[0]);
         }
+    }
 
-        private string GetViewLabel(string side) => side switch
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
         {
-            "PS" => "Pressure Side",
-            "SS" => "Suction Side",
-            "LE" => "Leading Edge",
-            "TE" => "Trailing Edge",
-            _ => side
+            State.DotNetRef = DotNetObjectReference.Create<object>(this);
+            await JSRuntime.InvokeVoidAsync("setupKeyboardNavigation", State.DotNetRef);
+        }
+    }
+
+    private void ToggleLeftPanel()
+    {
+        State.IsLeftPanelCollapsed = !State.IsLeftPanelCollapsed;
+        StateHasChanged();
+    }
+
+    private void ToggleRightPanel()
+    {
+        State.IsRightPanelCollapsed = !State.IsRightPanelCollapsed;
+        StateHasChanged();
+    }
+
+    private void SelectBlade(Blade blade)
+    {
+        Logger.LogInformation("Blade selected: {BladeSerial}", blade.SerialNumber);
+        State.SelectedBlade   = blade;
+        State.SelectedAnomaly = null;
+        State.SelectedView    = "PS";
+
+        foreach (var side in new[] { "PS", "SS", "LE", "TE" })
+            if (!blade.Views.Any(v => v.Side == side))
+                blade.Views.Add(new BladeView { Side = side });
+
+        UpdateSelectedViewImages();
+        StateHasChanged();
+    }
+
+    private async void SelectView(string view)
+    {
+        Logger.LogInformation("View changed to: {View}", view);
+        State.SelectedView        = view;
+        State.SelectedImage       = null;
+        State.ImageUrl            = string.Empty;
+        State.IsCanvasInitialized = false;
+        State.CurrentAnomaly      = null;
+
+        try { await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll"); }
+        catch { /* canvas may not be ready */ }
+
+        UpdateSelectedViewImages();
+        StateHasChanged();
+    }
+
+    private void UpdateSelectedViewImages()
+    {
+        if (State.SelectedBlade == null || string.IsNullOrEmpty(State.SelectedView))
+        {
+            State.SelectedViewImages = new();
+            return;
+        }
+        var view = State.SelectedBlade.Views.FirstOrDefault(v => v.Side == State.SelectedView);
+        State.SelectedViewImages = view?.Images.OrderBy(i => i.SequenceOrder).ToList() ?? new();
+    }
+
+    private string GetViewLabel(string side) => side switch
+    {
+        "PS" => "Pressure Side",
+        "SS" => "Suction Side",
+        "LE" => "Leading Edge",
+        "TE" => "Trailing Edge",
+        _    => side
+    };
+
+    private string GetShortDefectDisplay(Anomaly anomaly)
+    {
+        if (anomaly.Classification != null)
+        {
+            var defectType = anomaly.Classification.GetDefectTypeString();
+            var subtype    = anomaly.Classification.GetDefectSubtypeString();
+            return !string.IsNullOrEmpty(subtype) && subtype != "None"
+                ? $"{defectType} – {subtype}"
+                : defectType;
+        }
+        return anomaly.Type;
+    }
+
+    private void SelectAnomaly(Anomaly anomaly)
+    {
+        State.SelectedAnomaly = anomaly;
+        StateHasChanged();
+    }
+
+    private void OnCurrentDefectClassificationChanged(DefectClassification? classification)
+    {
+        if (State.CurrentAnomaly == null) return;
+        State.CurrentAnomaly.Classification = classification;
+        if (classification != null)
+            State.CurrentAnomaly.Type = classification.GetDefectTypeString();
+        Logger.LogInformation("Current defect classification: {Path}", classification?.GetFullPath() ?? "None");
+        StateHasChanged();
+    }
+
+    private void OnSelectedDefectClassificationChanged(DefectClassification? classification)
+    {
+        if (State.SelectedAnomaly == null) return;
+        State.SelectedAnomaly.Classification = classification;
+        if (classification != null)
+            State.SelectedAnomaly.Type = classification.GetDefectTypeString();
+        Logger.LogInformation("Selected defect classification: {Path}", classification?.GetFullPath() ?? "None");
+        StateHasChanged();
+    }
+
+    private async Task OnImageLoaded()
+    {
+        if (!State.IsCanvasInitialized && State.DotNetRef != null)
+        {
+            await Task.Delay(80);
+            var ok = await JSRuntime.InvokeAsync<bool>(
+                "inspectionCanvas.initialize",
+                "inspectionCanvas",
+                State.DotNetRef,
+                "bladeImage",
+                "canvasContainer");
+            State.IsCanvasInitialized = ok;
+            await SetModeInternal("inspect");
+            await ResetView();
+            await LoadExistingDefectsOnCanvas();
+        }
+    }
+
+    private async Task SetModeInternal(string mode)
+    {
+        State.CurrentMode = mode;
+        if (State.IsCanvasInitialized)
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.setMode", mode);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
+    {
+        State.CurrentWidthPx        = width;
+        State.CurrentHeightPx       = height;
+        State.CurrentWidthPct       = (width  / refWidth)  * 100;
+        State.CurrentHeightPct      = (height / refHeight) * 100;
+        State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+
+        double widthCm  = State.CurrentWidthPct;
+        double heightCm = State.CurrentHeightPct;
+
+        State.CurrentAnomaly = new Anomaly
+        {
+            AnomalyId      = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
+            RadiusMeters   = State.SelectedImage?.PositionMeters ?? 0,
+            BladeSide      = State.SelectedView ?? "PS",
+            AreaCm2        = widthCm * heightCm,
+            WidthCm        = widthCm,
+            Type           = "Other",
+            Classification = null,
+            Coordinates    = new ImageCoordinates
+            {
+                X = x, Y = y, Width = width, Height = height,
+                ReferenceWidth = refWidth, ReferenceHeight = refHeight
+            }
         };
+        StateHasChanged();
+    }
 
-        private string GetShortDefectDisplay(Anomaly anomaly)
-        {
-            // For sidebar list, show shortened version
-            if (anomaly.Classification != null)
-            {
-                var defectType = anomaly.Classification.GetDefectTypeString();
-                var subtype = anomaly.Classification.GetDefectSubtypeString();
-                
-                if (!string.IsNullOrEmpty(subtype) && subtype != "None")
-                {
-                    return $"{defectType} - {subtype}";
-                }
-                return defectType;
-            }
-            
-            return anomaly.Type; // Fallback to legacy
-        }
-        
-        private void SelectAnomaly(Anomaly anomaly)
-        {
-            State.SelectedAnomaly = anomaly;
-            StateHasChanged();
-        }
+    [JSInvokable]
+    public void ReceiveZoomChange(double newZoom)
+    {
+        State.ZoomLevel = newZoom;
+        StateHasChanged();
+    }
 
-        private void OnCurrentDefectClassificationChanged(DefectClassification? classification)
-        {
-            if (State.CurrentAnomaly != null)
-            {
-                State.CurrentAnomaly.Classification = classification;
-                
-                // Update legacy Type field for backward compatibility
-                if (classification != null)
-                {
-                    State.CurrentAnomaly.Type = classification.GetDefectTypeString();
-                }
-                
-                Logger.LogInformation("Current defect classification updated: {Classification}", 
-                    classification?.GetFullPath() ?? "None");
-                StateHasChanged();
-            }
-        }
+    [JSInvokable] public void NavigateNext()     => NextImage();
+    [JSInvokable] public void NavigatePrevious() => PrevImage();
 
-        private void OnSelectedDefectClassificationChanged(DefectClassification? classification)
-        {
-            if (State.SelectedAnomaly != null)
-            {
-                State.SelectedAnomaly.Classification = classification;
-                
-                // Update legacy Type field for backward compatibility
-                if (classification != null)
-                {
-                    State.SelectedAnomaly.Type = classification.GetDefectTypeString();
-                }
-                
-                Logger.LogInformation("Selected defect classification updated: {Classification}", 
-                    classification?.GetFullPath() ?? "None");
-                StateHasChanged();
-            }
-        }
-
-        private async Task OnImageLoaded()
-        {
-            if (!State.IsCanvasInitialized && State.DotNetRef != null)
-            {
-                await Task.Delay(100);
-                var result = await JSRuntime.InvokeAsync<bool>(
-                    "inspectionCanvas.initialize", 
-                    "inspectionCanvas", 
-                    State.DotNetRef,
-                    "bladeImage",
-                    "canvasContainer");
-                State.IsCanvasInitialized = result;
-                await SetModeInternal("inspect");
-                await ResetView();
-                
-                // CRITICAL: Load existing defects for this image
-                await LoadExistingDefectsOnCanvas();
-            }
-        }
-        
-        private async Task SetModeInternal(string mode)
-        {
-            State.CurrentMode = mode;
-            if (State.IsCanvasInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.setMode", mode);
-            }
-            StateHasChanged();
-        }
-
-        [JSInvokable]
-        public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
-        {
-            Logger.LogInformation("Defect box drawn: {Width}x{Height} px at ({X}, {Y})", width, height, x, y);
-            
-            State.CurrentWidthPx = width;
-            State.CurrentHeightPx = height;
-            State.CurrentWidthPct= (width / refWidth) * 100;
-            State.CurrentHeightPct = (height / refHeight) * 100;
-            State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
-            double widthCm = (width / refWidth) * 100;
-            double heightCm = (height / refHeight) * 100;
-            
-            State.CurrentAnomaly = new Anomaly
-            {
-                AnomalyId = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
-                RadiusMeters = State.SelectedImage?.PositionMeters ?? 0, 
-                BladeSide = State.SelectedView ?? "PS",
-                AreaCm2 = (widthCm * heightCm),
-                WidthCm = widthCm,
-                Type = "Other", // Default legacy type
-                Classification = null, // User must select classification
-                Coordinates = new ImageCoordinates 
-                { 
-                    X = x, 
-                    Y = y, 
-                    Width = width, 
-                    Height = height,
-                    ReferenceWidth = refWidth,
-                    ReferenceHeight = refHeight
-                }
-            };
-            
-            StateHasChanged();
-        }
-
-        [JSInvokable]
-        public void ReceiveZoomChange(double newZoom)
-        {
-            State.ZoomLevel = newZoom;
-            StateHasChanged();
-        }
-
-        [JSInvokable]
-        public void NavigateNext()
-        {
-            NextImage();
-        }
-
-        [JSInvokable]
-        public void NavigatePrevious()
-        {
-            PrevImage();
-        }
-
-         [JSInvokable]
+    [JSInvokable]
     public void ReceiveBoxDeleted(int index)
     {
         Logger.LogInformation("Box #{Index} deleted from canvas", index + 1);
-        
-        if (State.SelectedImage != null && index >= 0 && index < State.SelectedImage.Anomalies.Count)
-        {
-            var deletedAnomaly = State.SelectedImage.Anomalies[index];
-            
-            // Remove from image
-            State.SelectedImage.Anomalies.RemoveAt(index);
-            
-            // Remove from blade
-            if (State.SelectedBlade != null)
-            {
-                State.SelectedBlade.Anomalies.Remove(deletedAnomaly);
-            }
-            
-            // Clear selection if this was selected
-            if (State.SelectedAnomaly == deletedAnomaly)
-            {
-                State.SelectedAnomaly = null;
-            }
-            
-            StateHasChanged();
-        }
+        if (State.SelectedImage == null || index < 0 || index >= State.SelectedImage.Anomalies.Count) return;
+
+        var deleted = State.SelectedImage.Anomalies[index];
+        State.SelectedImage.Anomalies.RemoveAt(index);
+        State.SelectedBlade?.Anomalies.Remove(deleted);
+        if (State.SelectedAnomaly == deleted) State.SelectedAnomaly = null;
+        StateHasChanged();
     }
-        private void SaveAnomaly()
-{
-    if (State.CurrentAnomaly != null && State.SelectedBlade != null)
+
+    private void SaveAnomaly()
     {
+        if (State.CurrentAnomaly == null || State.SelectedBlade == null) return;
+
         if (State.CurrentAnomaly.Classification == null)
         {
             Logger.LogWarning("Attempted to save defect without classification");
@@ -996,555 +1095,315 @@
         }
 
         State.CurrentAnomaly.BladeSide = State.SelectedView;
-
         State.SelectedBlade.Anomalies.Add(State.CurrentAnomaly);
+        State.SelectedImage?.Anomalies.Add(State.CurrentAnomaly);
 
-        if (State.SelectedImage != null)
-        {
-            State.SelectedImage.Anomalies.Add(State.CurrentAnomaly);
-        }
-
-        // Persist to LiteDB
         if (State.Project != null)
-        {
             DashboardService.SaveProject(State.Project);
-        }
 
         State.CurrentAnomaly = null;
         StateHasChanged();
     }
-}
 
-        [JSInvokable]
-    public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area, double boundingWidth, double boundingHeight, double refWidth, double refHeight)
+    [JSInvokable]
+    public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area,
+        double boundingWidth, double boundingHeight, double refWidth, double refHeight)
     {
         if (xCoords.Length != 4 || yCoords.Length != 4)
         {
             Logger.LogWarning("Invalid polygon selection: expected 4 points");
             return;
         }
-        
-        // Convert 4 arbitrary points to a proper rectangle (find best-fit rectangle)
-        var rectanglePoints = ConvertToRectangle(xCoords, yCoords);
-        
-        Logger.LogInformation("4-point selection converted to rotated rectangle: Area={Area:F2} px², Dims={W:F0}x{H:F0} px", 
-            area, boundingWidth, boundingHeight);
-        
-        // Flatten points into single array [x1,y1,x2,y2,x3,y3,x4,y4]
+
+        var rectPoints   = ConvertToRectangle(xCoords, yCoords);
+        var dims         = CalculateRectangleDimensions(rectPoints);
         var polygonPoints = new List<double>();
-        for (int i = 0; i < 4; i++)
-        {
-            polygonPoints.Add(rectanglePoints[i].x);
-            polygonPoints.Add(rectanglePoints[i].y);
-        }
-        
-        // Recalculate actual rectangle dimensions
-        var rectDimensions = CalculateRectangleDimensions(rectanglePoints);
-        
-        State.CurrentWidthPx = rectDimensions.width;
-        State.CurrentHeightPx = rectDimensions.height;
-        State.CurrentWidthPct = (rectDimensions.width / refWidth) * 100;
-        State.CurrentHeightPct = (rectDimensions.height / refHeight) * 100;
+        for (int i = 0; i < 4; i++) { polygonPoints.Add(rectPoints[i].x); polygonPoints.Add(rectPoints[i].y); }
+
+        State.CurrentWidthPx        = dims.width;
+        State.CurrentHeightPx       = dims.height;
+        State.CurrentWidthPct       = (dims.width  / refWidth)  * 100;
+        State.CurrentHeightPct      = (dims.height / refHeight) * 100;
         State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
-        
-        double widthCm = (rectDimensions.width / refWidth) * 100;
-        double heightCm = (rectDimensions.height / refHeight) * 100;
-        
+
+        double widthCm  = State.CurrentWidthPct;
+        double heightCm = State.CurrentHeightPct;
+
         State.CurrentAnomaly = new Anomaly
         {
-            AnomalyId = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
-            RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
-            BladeSide = State.SelectedView ?? "PS", // Set to current view
-            AreaCm2 = (widthCm * heightCm),
-            WidthCm = widthCm,
-            Type = "Other",
+            AnomalyId      = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
+            RadiusMeters   = State.SelectedImage?.PositionMeters ?? 0,
+            BladeSide      = State.SelectedView ?? "PS",
+            AreaCm2        = widthCm * heightCm,
+            WidthCm        = widthCm,
+            Type           = "Other",
             Classification = null,
-            Coordinates = new ImageCoordinates
+            Coordinates    = new ImageCoordinates
             {
-                PolygonPoints = polygonPoints,
-                ReferenceWidth = refWidth,
+                PolygonPoints   = polygonPoints,
+                ReferenceWidth  = refWidth,
                 ReferenceHeight = refHeight,
-                // Keep legacy fields for backward compatibility
-                X = rectanglePoints.Min(p => p.x),
-                Y = rectanglePoints.Min(p => p.y),
-                Width = rectDimensions.width,
-                Height = rectDimensions.height
+                X      = rectPoints.Min(p => p.x),
+                Y      = rectPoints.Min(p => p.y),
+                Width  = dims.width,
+                Height = dims.height
             }
         };
-        
         StateHasChanged();
     }
 
-    /// <summary>
-    /// Converts 4 arbitrary points to a proper rectangle (orthogonal corners)
-    /// by finding the best-fit rotated rectangle
-    /// </summary>
     private (double x, double y)[] ConvertToRectangle(double[] xCoords, double[] yCoords)
     {
-        // Calculate center point
-        double cx = xCoords.Average();
-        double cy = yCoords.Average();
-        
-        // Find the two longest opposite edges to determine rectangle orientation
-        var points = new List<(double x, double y, int index)>();
-        for (int i = 0; i < 4; i++)
-        {
-            points.Add((xCoords[i], yCoords[i], i));
-        }
-        
-        // Sort points by angle from center to establish ordering
-        var sortedPoints = points.OrderBy(p => Math.Atan2(p.y - cy, p.x - cx)).ToList();
-        
-        // Calculate the primary axis (longest edge)
-        double maxDist = 0;
-        int p1Idx = 0, p2Idx = 1;
-        
+        double cx = xCoords.Average(), cy = yCoords.Average();
+        var pts = Enumerable.Range(0, 4)
+            .Select(i => (x: xCoords[i], y: yCoords[i]))
+            .OrderBy(p => Math.Atan2(p.y - cy, p.x - cx))
+            .ToList();
+
+        double maxDist = 0; int p1 = 0, p2 = 1;
         for (int i = 0; i < 4; i++)
         {
             int j = (i + 1) % 4;
-            double dist = Math.Sqrt(
-                Math.Pow(sortedPoints[j].x - sortedPoints[i].x, 2) + 
-                Math.Pow(sortedPoints[j].y - sortedPoints[i].y, 2));
-            
-            if (dist > maxDist)
-            {
-                maxDist = dist;
-                p1Idx = i;
-                p2Idx = j;
-            }
+            double d = Math.Sqrt(Math.Pow(pts[j].x - pts[i].x, 2) + Math.Pow(pts[j].y - pts[i].y, 2));
+            if (d > maxDist) { maxDist = d; p1 = i; p2 = j; }
         }
-        
-        // Calculate rectangle angle from the longest edge
-        double dx = sortedPoints[p2Idx].x - sortedPoints[p1Idx].x;
-        double dy = sortedPoints[p2Idx].y - sortedPoints[p1Idx].y;
-        double angle = Math.Atan2(dy, dx);
-        
-        // Project all points onto the primary and secondary axes
-        double cosA = Math.Cos(angle);
-        double sinA = Math.Sin(angle);
-        
-        var projections = sortedPoints.Select(p =>
+
+        double angle = Math.Atan2(pts[p2].y - pts[p1].y, pts[p2].x - pts[p1].x);
+        double cosA  = Math.Cos(angle), sinA = Math.Sin(angle);
+
+        var proj = pts.Select(p => (
+            u:  (p.x - cx) * cosA + (p.y - cy) * sinA,
+            v: -(p.x - cx) * sinA + (p.y - cy) * cosA
+        )).ToList();
+
+        double minU = proj.Min(p => p.u), maxU = proj.Max(p => p.u);
+        double minV = proj.Min(p => p.v), maxV = proj.Max(p => p.v);
+
+        return new[]
         {
-            double relX = p.x - cx;
-            double relY = p.y - cy;
-            return (
-                u: relX * cosA + relY * sinA,  // projection on primary axis
-                v: -relX * sinA + relY * cosA  // projection on secondary axis
-            );
-        }).ToList();
-        
-        // Find extents
-        double minU = projections.Min(p => p.u);
-        double maxU = projections.Max(p => p.u);
-        double minV = projections.Min(p => p.v);
-        double maxV = projections.Max(p => p.v);
-        
-        // Generate perfect rectangle corners
-        var rectCorners = new[]
-        {
-            (u: minU, v: minV), // Bottom-left
-            (u: maxU, v: minV), // Bottom-right
-            (u: maxU, v: maxV), // Top-right
-            (u: minU, v: maxV)  // Top-left
-        };
-        
-        // Transform back to image coordinates
-        return rectCorners.Select(corner =>
-        {
-            double x = cx + corner.u * cosA - corner.v * sinA;
-            double y = cy + corner.u * sinA + corner.v * cosA;
-            return (x, y);
-        }).ToArray();
+            (u: minU, v: minV), (u: maxU, v: minV),
+            (u: maxU, v: maxV), (u: minU, v: maxV)
+        }.Select(c => (
+            x: cx + c.u * cosA - c.v * sinA,
+            y: cy + c.u * sinA + c.v * cosA
+        )).ToArray();
     }
 
-    /// <summary>
-    /// Calculate the actual width and height of a rectangle from its 4 corner points
-    /// </summary>
-    private (double width, double height) CalculateRectangleDimensions((double x, double y)[] corners)
-    {
-        // Calculate distances between adjacent corners
-        double width = Math.Sqrt(
-            Math.Pow(corners[1].x - corners[0].x, 2) + 
-            Math.Pow(corners[1].y - corners[0].y, 2));
-        
-        double height = Math.Sqrt(
-            Math.Pow(corners[3].x - corners[0].x, 2) + 
-            Math.Pow(corners[3].y - corners[0].y, 2));
-        
-        return (width, height);
-    }
-        private async Task CancelDefect()
+    private (double width, double height) CalculateRectangleDimensions((double x, double y)[] corners) =>
+    (
+        Math.Sqrt(Math.Pow(corners[1].x - corners[0].x, 2) + Math.Pow(corners[1].y - corners[0].y, 2)),
+        Math.Sqrt(Math.Pow(corners[3].x - corners[0].x, 2) + Math.Pow(corners[3].y - corners[0].y, 2))
+    );
+
+    private async Task CancelDefect()
     {
         try
         {
-            Logger.LogInformation("Defect canceled - removing drawing");
-            
             if (State.IsCanvasInitialized)
             {
-                // Cancel any in-progress polygon drawing
                 await JSRuntime.InvokeVoidAsync("inspectionCanvas.cancelCurrentDrawing");
-                
-                // Remove completed polygon if exists
-                if (State.CurrentCanvasBoxIndex >= 0)
-                {
-                    try
-                    {
-                        await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeBoxByIndex", State.CurrentCanvasBoxIndex);
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning(ex, "Could not remove box by index, trying removeLastBox");
-                        await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
-                    }
-                }
+                try   { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeBoxByIndex", State.CurrentCanvasBoxIndex); }
+                catch { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox"); }
             }
-            
-            State.CurrentAnomaly = null;
-            State.CurrentCanvasBoxIndex = -1;
-            State.CurrentWidthPx = 0;
-            State.CurrentHeightPx = 0;
-            State.CurrentWidthPct = 0;
-            State.CurrentHeightPct = 0;
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error occurred while canceling the defect.");
-        }
+        catch (Exception ex) { Logger.LogError(ex, "Error cancelling defect"); }
         finally
         {
+            State.CurrentAnomaly        = null;
+            State.CurrentCanvasBoxIndex = -1;
+            State.CurrentWidthPx = State.CurrentHeightPx = State.CurrentWidthPct = State.CurrentHeightPct = 0;
             StateHasChanged();
         }
     }
-          
-        private async Task ZoomIn()
+
+    private async Task ZoomIn()
+    {
+        State.ZoomLevel = Math.Min(State.ZoomLevel + 0.1, 3.0);
+        if (State.IsCanvasInitialized)
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.setZoom", State.ZoomLevel);
+        StateHasChanged();
+    }
+
+    private async Task ZoomOut()
+    {
+        State.ZoomLevel = Math.Max(State.ZoomLevel - 0.1, 0.1);
+        if (State.IsCanvasInitialized)
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.setZoom", State.ZoomLevel);
+        StateHasChanged();
+    }
+
+    private async Task ResetView()
+    {
+        if (State.IsCanvasInitialized)
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");
+        StateHasChanged();
+    }
+
+    private async void SelectImageDirect(InspectionImage img)
+    {
+        State.SelectedImage       = img;
+        State.ImageUrl            = img.ImageUrl;
+        State.SelectedView        = State.SelectedBlade?.Views.FirstOrDefault(v => v.Images.Contains(img))?.Side ?? State.SelectedView;
+        State.IsCanvasInitialized = false;
+        State.CurrentAnomaly      = null;
+        StateHasChanged();
+        await Task.Delay(150);
+        await LoadExistingDefectsOnCanvas();
+    }
+
+    private async Task LoadExistingDefectsOnCanvas()
+    {
+        if (State.SelectedImage == null || !State.IsCanvasInitialized) return;
+        try
         {
-            State.ZoomLevel = Math.Min(State.ZoomLevel + 0.25, 3.0);
-            if (State.IsCanvasInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.setZoom", State.ZoomLevel);
-            }
-            StateHasChanged();
-        }
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
+            if (!State.SelectedImage.Anomalies.Any()) return;
 
-
-        private async Task ZoomOut()
-        {
-            Logger.LogInformation("Zooming out. Current ZoomLevel: {ZoomLevel}", State.ZoomLevel);
-            State.ZoomLevel = Math.Max(State.ZoomLevel - 0.05, 0.1); // Adjust minimum zoom level if needed
-            Logger.LogInformation("New ZoomLevel after zooming out: {ZoomLevel}", State.ZoomLevel);
-            if (State.IsCanvasInitialized)
-            {
-             await JSRuntime.InvokeVoidAsync("inspectionCanvas.setZoom", State.ZoomLevel);
-            }
-            StateHasChanged();
-        }
-
-        private async Task ResetView()
-        {
-            State.ZoomLevel = 1.0;
-            if (State.IsCanvasInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");
-            }
-            StateHasChanged();
-        }
-
-        private async void SelectImageDirect(InspectionImage img)
-        {
-            State.SelectedImage = img;
-            State.ImageUrl = img.ImageUrl;
-            State.SelectedView = State.SelectedBlade?.Views.FirstOrDefault(v => v.Images.Contains(img))?.Side ?? State.SelectedView;
-            
-            State.IsCanvasInitialized = false; 
-            State.CurrentAnomaly = null;
-            
-            StateHasChanged();
-            
-            // CRITICAL FIX: Wait for image to load, then reload defects
-            await Task.Delay(150); // Give time for image to render
-            await LoadExistingDefectsOnCanvas();
-        }
-
-        /// <summary>
-        /// Loads existing defects for the current image onto the canvas
-        /// </summary>
-        private async Task LoadExistingDefectsOnCanvas()
-        {
-            if (State.SelectedImage == null || !State.IsCanvasInitialized) return;
-
-            try
-            {
-                // Clear all existing boxes first
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
-                
-                // Load defects specific to this image
-                if (State.SelectedImage.Anomalies.Any())
+            var boxes = State.SelectedImage.Anomalies
+                .Where(a => a.Coordinates != null)
+                .Select(a => new
                 {
-                    var anomalyBoxes = State.SelectedImage.Anomalies
-                        .Where(a => a.Coordinates != null)
-                        .Select(a => new
-                        {
-                            points = a.Coordinates.IsPolygon 
-                                ? ConvertPolygonPointsToJsFormat(a.Coordinates.PolygonPoints)
-                                : ConvertRectToPolygonPoints(a.Coordinates),
-                            id = a.Id.GetHashCode(),
-                            area = a.Coordinates.GetAreaInPixels(),
-                            bounds = new
-                            {
-                                x = a.Coordinates.X,
-                                y = a.Coordinates.Y,
-                                width = a.Coordinates.Width,
-                                height = a.Coordinates.Height
-                            }
-                        })
-                        .ToList();
-                    
-                    if (anomalyBoxes.Any())
-                    {
-                        await JSRuntime.InvokeVoidAsync("inspectionCanvas.loadAnomalies", anomalyBoxes);
-                        Logger.LogInformation("Loaded {Count} defects onto canvas for image {ImageId}", 
-                            anomalyBoxes.Count, State.SelectedImage.Id);
-                    }
-                }
-            }
-            catch (Exception ex)
+                    points = a.Coordinates.IsPolygon
+                        ? ConvertPolygonPointsToJsFormat(a.Coordinates.PolygonPoints)
+                        : ConvertRectToPolygonPoints(a.Coordinates),
+                    id     = a.Id.GetHashCode(),
+                    area   = a.Coordinates.GetAreaInPixels(),
+                    bounds = new { a.Coordinates.X, a.Coordinates.Y, a.Coordinates.Width, a.Coordinates.Height }
+                }).ToList();
+
+            if (boxes.Any())
             {
-                Logger.LogError(ex, "Failed to load existing defects on canvas");
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.loadAnomalies", boxes);
+                Logger.LogInformation("Loaded {Count} defects for image {Id}", boxes.Count, State.SelectedImage.Id);
             }
         }
+        catch (Exception ex) { Logger.LogError(ex, "Failed to load defects on canvas"); }
+    }
 
-        /// <summary>
-        /// Convert polygon points array to JavaScript format [{x, y}, {x, y}, ...]
-        /// </summary>
-        private object[] ConvertPolygonPointsToJsFormat(List<double> polygonPoints)
-        {
-            if (polygonPoints == null || polygonPoints.Count != 8) 
-                return Array.Empty<object>();
-            
-            var points = new List<object>();
-            for (int i = 0; i < 4; i++)
-            {
-                points.Add(new { x = polygonPoints[i * 2], y = polygonPoints[i * 2 + 1] });
-            }
-            return points.ToArray();
-        }
+    private object[] ConvertPolygonPointsToJsFormat(List<double> pts)
+    {
+        if (pts == null || pts.Count != 8) return Array.Empty<object>();
+        return Enumerable.Range(0, 4)
+            .Select(i => (object)new { x = pts[i * 2], y = pts[i * 2 + 1] })
+            .ToArray();
+    }
 
-        /// <summary>
-        /// Convert rectangle coordinates to 4-point polygon format for JavaScript
-        /// </summary>
-        private object[] ConvertRectToPolygonPoints(ImageCoordinates coords)
-        {
-            return new[]
-            {
-                new { x = coords.X, y = coords.Y },                           // Top-left
-                new { x = coords.X + coords.Width, y = coords.Y },            // Top-right
-                new { x = coords.X + coords.Width, y = coords.Y + coords.Height }, // Bottom-right
-                new { x = coords.X, y = coords.Y + coords.Height }            // Bottom-left
+    private object[] ConvertRectToPolygonPoints(ImageCoordinates c) => new[]
+    {
+        (object)new { x = c.X,           y = c.Y            },
+        (object)new { x = c.X + c.Width, y = c.Y            },
+        (object)new { x = c.X + c.Width, y = c.Y + c.Height },
+        (object)new { x = c.X,           y = c.Y + c.Height }
     };
-        }
-        
-        // ── PDF Report Generation ─────────────────────────────────────────────────
-        private bool _isGeneratingReport = false;
 
-        protected async Task GenerateReport()
+    private bool _isGeneratingReport = false;
+
+    protected async Task GenerateReport()
+    {
+        if (State.Project == null || _isGeneratingReport) return;
+        _isGeneratingReport = true;
+        StateHasChanged();
+        try
         {
-            if (State.Project == null || _isGeneratingReport) return;
-
-            _isGeneratingReport = true;
-            StateHasChanged();
-
-            try
-            {
-                Logger.LogInformation("Generating PDF report for project {TurbineId}", State.Project.TurbineId);
-
-                var pdfBytes = await ReportService.GenerateProjectReportAsync(State.Project);
-
-                Logger.LogInformation("PDF generated: {Bytes} bytes for {TurbineId}", pdfBytes.Length, State.Project.TurbineId);
-
-                var fileName = $"WTG_Report_{State.Project.TurbineId}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
-
-                // Use DotNetStreamReference — the correct Blazor 8 approach for binary file downloads.
-                // Passing byte[] directly via InvokeVoidAsync would serialize it as Base64 in JS,
-                // causing new Uint8Array(bytes) to silently fail.
-                using var streamRef = new DotNetStreamReference(stream: new System.IO.MemoryStream(pdfBytes), leaveOpen: false);
-                await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, "application/pdf", streamRef);
-
-                Logger.LogInformation("PDF report download triggered — {TurbineId}", State.Project.TurbineId);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "PDF report generation failed for project {TurbineId}", State.Project?.TurbineId);
-            }
-            finally
-            {
-                _isGeneratingReport = false;
-                StateHasChanged();
-            }
+            var pdfBytes = await ReportService.GenerateProjectReportAsync(State.Project);
+            var fileName = $"WTG_Report_{State.Project.TurbineId}_{DateTime.Now:yyyyMMdd_HHmm}.pdf";
+            using var streamRef = new DotNetStreamReference(new System.IO.MemoryStream(pdfBytes), leaveOpen: false);
+            await JSRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, "application/pdf", streamRef);
+            Logger.LogInformation("PDF download triggered – {TurbineId}", State.Project.TurbineId);
         }
-
-
-        private async Task HandleBulkFileUpload(InputFileChangeEventArgs e)
-        {
-            if ( State.SelectedBlade == null || string.IsNullOrEmpty(State.SelectedView)) 
-            {
-                Logger.LogWarning("File upload attempted without blade or view selected");
-                return;
-            }
-
-            var fileCount = e.FileCount;
-            Logger.LogInformation("File upload started: {FileCount} files for view {View}", fileCount, State.SelectedView);
-
-            try
-            {
-                var view =  State.SelectedBlade.Views.FirstOrDefault(v => v.Side == State.SelectedView);
-                if (view == null)
-                {
-                    view = new BladeView { Side = State.SelectedView };
-                     State.SelectedBlade.Views.Add(view);
-                }
-
-                var files = e.GetMultipleFiles(50); 
-                foreach (var file in files)
-                {
-                    using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
-                    var url = await FileStorageService.SaveFileAsync(stream, file.Name);
-                    
-                    view.Images.Add(new InspectionImage 
-                    {
-                        ImageUrl = url,
-                        SequenceOrder = view.Images.Count
-                    });
-                }
-                
-                UpdateSelectedViewImages();
-                if (State.SelectedViewImages.Count > 0)
-                {
-                    SelectImageDirect(State.SelectedViewImages.First());
-                }
-                
-                Logger.LogInformation("File upload completed: {FileCount} files processed for view {View}", files.Count, State.SelectedView);
-                StateHasChanged();
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "File upload failed for view {View}", State.SelectedView);
-                throw;
-            }
-        }
- 
-        private void DeleteImage(InspectionImage img)
-        {
-            if ( State.SelectedBlade == null) return;
-            
-            foreach(var view in  State.SelectedBlade.Views)
-            {
-                if (view.Images.Remove(img))
-                {
-                    UpdateSelectedViewImages();
-                    
-                    // Select another image if available
-                    if (State.SelectedViewImages.Count > 0)
-                    {
-                        SelectImageDirect(State.SelectedViewImages.First());
-                    }
-                    else
-                    {
-                        State.SelectedImage = null;
-                        State.ImageUrl = string.Empty;
-                    }
-                    break;
-                }
-            }
-            
-            StateHasChanged();
-        }
-
-        private void NavigateBack()
-        {
-            Navigation.NavigateTo("/");
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            (State.DotNetRef as IDisposable)?.Dispose();
-        }
-
-        private void NextImage()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
-            
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            if (currentIndex < State.SelectedViewImages.Count - 1)
-            {
-                SelectImageDirect(State.SelectedViewImages[currentIndex + 1]);
-            }
-        }
-
-        private void PrevImage()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
-            
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            if (currentIndex > 0)
-            {
-                SelectImageDirect(State.SelectedViewImages[currentIndex - 1]);
-            }
-        }
-
-        private bool CanNavigateNext()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return false;
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            return currentIndex < State.SelectedViewImages.Count - 1;
-        }
-
-        private bool CanNavigatePrev()
-        {
-            if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return false;
-            var currentIndex = State.SelectedViewImages.IndexOf(State.SelectedImage);
-            return currentIndex > 0;
-        }
-
-        private void DeleteCurrentImage()
-        {
-            if (State.SelectedImage != null)
-            {
-                DeleteImage(State.SelectedImage);
-            }
-        }
-
-        private async Task DeleteAnomaly()
-        {
-            if (State.SelectedAnomaly != null)
-            {
-                if (State.SelectedBlade != null && State.SelectedBlade.Anomalies.Contains(State.SelectedAnomaly))
-                {
-                    State.SelectedBlade.Anomalies.Remove(State.SelectedAnomaly);
-                }
-                
-                if (State.SelectedImage != null && State.SelectedImage.Anomalies.Contains(State.SelectedAnomaly))
-                {
-                    State.SelectedImage.Anomalies.Remove(State.SelectedAnomaly);
-                }
-                
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox");
-                
-                State.SelectedAnomaly = null;
-                
-                StateHasChanged();
-            }
-        }
-
-        private async Task ToggleVisualMode()
-        {
-            State.IsVisualMode = !State.IsVisualMode;
-            await Task.Delay(50); 
-            
-            if (State.IsCanvasInitialized)
-            {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");
-            }
-            
-            StateHasChanged();
-        }
+        catch (Exception ex) { Logger.LogError(ex, "PDF generation failed for {TurbineId}", State.Project?.TurbineId); }
+        finally { _isGeneratingReport = false; StateHasChanged(); }
     }
+
+    private async Task HandleBulkFileUpload(InputFileChangeEventArgs e)
+    {
+        if (State.SelectedBlade == null || string.IsNullOrEmpty(State.SelectedView)) return;
+        try
+        {
+            var view = State.SelectedBlade.Views.FirstOrDefault(v => v.Side == State.SelectedView)
+                    ?? new BladeView { Side = State.SelectedView };
+            if (!State.SelectedBlade.Views.Contains(view))
+                State.SelectedBlade.Views.Add(view);
+
+            foreach (var file in e.GetMultipleFiles(50))
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+                var url = await FileStorageService.SaveFileAsync(stream, file.Name);
+                view.Images.Add(new InspectionImage { ImageUrl = url, SequenceOrder = view.Images.Count });
+            }
+
+            UpdateSelectedViewImages();
+            if (State.SelectedViewImages.Count > 0)
+                SelectImageDirect(State.SelectedViewImages.First());
+            StateHasChanged();
+        }
+        catch (Exception ex) { Logger.LogError(ex, "File upload failed for view {View}", State.SelectedView); throw; }
+    }
+
+    private void DeleteImage(InspectionImage img)
+    {
+        if (State.SelectedBlade == null) return;
+        foreach (var view in State.SelectedBlade.Views)
+        {
+            if (!view.Images.Remove(img)) continue;
+            UpdateSelectedViewImages();
+            if (State.SelectedViewImages.Count > 0)
+                SelectImageDirect(State.SelectedViewImages.First());
+            else { State.SelectedImage = null; State.ImageUrl = string.Empty; }
+            break;
+        }
+        StateHasChanged();
+    }
+
+    private void NavigateBack() => Navigation.NavigateTo("/");
+
+    public async ValueTask DisposeAsync()
+    {
+        (State.DotNetRef as IDisposable)?.Dispose();
+    }
+
+    private void NextImage()
+    {
+        if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
+        var idx = State.SelectedViewImages.IndexOf(State.SelectedImage);
+        if (idx < State.SelectedViewImages.Count - 1)
+            SelectImageDirect(State.SelectedViewImages[idx + 1]);
+    }
+
+    private void PrevImage()
+    {
+        if (State.SelectedViewImages.Count == 0 || State.SelectedImage == null) return;
+        var idx = State.SelectedViewImages.IndexOf(State.SelectedImage);
+        if (idx > 0) SelectImageDirect(State.SelectedViewImages[idx - 1]);
+    }
+
+    private bool CanNavigateNext() =>
+        State.SelectedViewImages.Count > 0 && State.SelectedImage != null &&
+        State.SelectedViewImages.IndexOf(State.SelectedImage) < State.SelectedViewImages.Count - 1;
+
+    private bool CanNavigatePrev() =>
+        State.SelectedViewImages.Count > 0 && State.SelectedImage != null &&
+        State.SelectedViewImages.IndexOf(State.SelectedImage) > 0;
+
+    private void DeleteCurrentImage() { if (State.SelectedImage != null) DeleteImage(State.SelectedImage); }
+
+    private async Task DeleteAnomaly()
+    {
+        if (State.SelectedAnomaly == null) return;
+        State.SelectedBlade?.Anomalies.Remove(State.SelectedAnomaly);
+        State.SelectedImage?.Anomalies.Remove(State.SelectedAnomaly);
+        try { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox"); } catch { }
+        State.SelectedAnomaly = null;
+        StateHasChanged();
+    }
+
+    private async Task ToggleVisualMode()
+    {
+        State.IsVisualMode = !State.IsVisualMode;
+        // Give the DOM a frame to apply the new CSS before asking JS to re-fit
+        await Task.Delay(80);
+        if (State.IsCanvasInitialized)
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");
+        StateHasChanged();
+    }
+}
