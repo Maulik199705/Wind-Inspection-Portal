@@ -81,7 +81,7 @@
             <!-- Defect Type for Auxiliary Component -->
             <div class="form-group">
                 <label class="form-label">Defect Type</label>
-                <select class="form-select" @bind="SelectedDefectType">
+                <select class="form-select" @bind="SelectedDefectType" @bind:after="OnDefectTypeChanged">
                     <option value="">-- Select Defect Type --</option>
                     @foreach (var defectType in AvailableDefectTypes)
                     {
