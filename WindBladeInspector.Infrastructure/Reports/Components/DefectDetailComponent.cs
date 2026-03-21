@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using WindBladeInspector.Core.Entities;
 using static WindBladeInspector.Infrastructure.Reports.PdfReportGenerationService;
+using WindBladeInspector.Core.Enums;
 
 namespace WindBladeInspector.Infrastructure.Reports.Components;
 
@@ -41,10 +42,13 @@ internal sealed class DefectDetailComponent
             // ── DYNAMIC IMAGE CONTAINER ──
             col.Item().PaddingBottom(20).AlignCenter().Element(c =>
             {
-                if (_imageBytes != null)
+                if (_imageBytes != null && _defect.Anomaly != null)
+
                 {
                     byte[] croppedBytes = CropAndAnnotate(_imageBytes, _defect.Anomaly) ?? _imageBytes;
                     c.MinHeight(200).MaxHeight(250).AlignCenter().AlignMiddle().Image(croppedBytes, ImageScaling.FitArea);
+                    //c.MinHeight(200).MaxHeight(250).AlignCenter().AlignMiddle().Image(Image.FromBinary(croppedBytes).FitArea());
+
                 }
                 else
                 {
@@ -79,7 +83,7 @@ internal sealed class DefectDetailComponent
                 Row("Side", GetFullViewLabel(_defect.View));
                 Row("Material", "Auxiliary Component");
                 Row("Type", _defect.Anomaly.GetDefectTypeDisplay() ?? "Leading Edge Protection");
-                Row("Subtype", _defect.Anomaly.Recommendation ?? "None");
+                Row("Subtype", _defect.Anomaly.Classification?.GetDefectSubtypeString() ?? "None");
                 Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
                 Row("Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
                 Row("Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");

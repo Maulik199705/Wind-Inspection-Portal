@@ -10,19 +10,43 @@ public class DefectClassification
 {
     /// <summary>Primary category: Blade or AuxiliaryComponent.</summary>
     public ComponentCategory Category { get; set; } = ComponentCategory.Blade;
-    
+
     /// <summary>Blade material (if Category = Blade).</summary>
     public BladeMaterial? BladeMaterial { get; set; }
-    
+
     /// <summary>Auxiliary component type (if Category = AuxiliaryComponent).</summary>
     public AuxiliaryComponent? AuxiliaryComponentType { get; set; }
-    
+
     /// <summary>Defect type as integer (mapped to specific enum based on Material/Component).</summary>
     public int DefectType { get; set; }
-    
+
     /// <summary>Defect subtype as integer (optional, mapped to specific enum based on DefectType).</summary>
     public int? DefectSubtype { get; set; }
-    
+
+    /// <summary>
+    /// Ensures that DefectSubtype is set correctly based on the defect type and material.
+    /// </summary>
+    public void EnsureSubtype()
+    {
+        if (!DefectSubtype.HasValue)
+        {
+            if (Category == ComponentCategory.Blade && BladeMaterial.HasValue)
+            {
+                switch (BladeMaterial.Value)
+                {
+                    case Enums.BladeMaterial.Surface:
+                        if ((SurfaceDefectType)DefectType == SurfaceDefectType.Discoloration)
+                        {
+                            DefectSubtype = (int?)SurfaceDiscolorationSubtype.Mechanical; // Default subtype
+                        }
+                        break;
+
+                        // Add similar logic for other BladeMaterial cases if needed
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Gets the human-readable defect type string.
     /// </summary>
@@ -58,10 +82,10 @@ public class DefectClassification
                 _ => "Other"
             };
         }
-        
+
         return "Unknown";
     }
-    
+
     /// <summary>
     /// Gets the human-readable defect subtype string.
     /// </summary>
@@ -69,45 +93,45 @@ public class DefectClassification
     {
         if (!DefectSubtype.HasValue || DefectSubtype.Value == 0)
             return null;
-            
+
         if (Category == ComponentCategory.Blade && BladeMaterial.HasValue)
         {
             return BladeMaterial.Value switch
             {
-                Enums.BladeMaterial.Surface when DefectType == (int)SurfaceDefectType.Discoloration 
+                Enums.BladeMaterial.Surface when DefectType == (int)SurfaceDefectType.Discoloration
                     => ((SurfaceDiscolorationSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Surface when DefectType == (int)SurfaceDefectType.Erosion 
+                Enums.BladeMaterial.Surface when DefectType == (int)SurfaceDefectType.Erosion
                     => ((SurfaceErosionSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.TopCoat when DefectType == (int)TopCoatDefectType.Crack 
+                Enums.BladeMaterial.TopCoat when DefectType == (int)TopCoatDefectType.Crack
                     => ((TopCoatCrackSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.TopCoat when DefectType == (int)TopCoatDefectType.Pinholes 
+                Enums.BladeMaterial.TopCoat when DefectType == (int)TopCoatDefectType.Pinholes
                     => ((TopCoatPinholesSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Erosion 
+                Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Erosion
                     => ((LaminateErosionSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Delamination 
+                Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Delamination
                     => ((LaminateDelaminationSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Crack 
+                Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Crack
                     => ((StructureCrackSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Delamination 
+                Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Delamination
                     => ((StructureDelaminationSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Through when DefectType == (int)ThroughDefectType.Bondline 
+                Enums.BladeMaterial.Through when DefectType == (int)ThroughDefectType.Bondline
                     => ((ThroughBondlineSubtype)DefectSubtype.Value).ToString(),
                 _ => null
             };
         }
-        
+
         return null;
     }
-    
+
     /// <summary>
     /// Gets the full hierarchical path as a string (e.g., "Blade > Surface > Erosion > Chip").
     /// </summary>
     public string GetFullPath()
     {
         var parts = new List<string>();
-        
+
         parts.Add(Category.ToString());
-        
+
         if (Category == ComponentCategory.Blade && BladeMaterial.HasValue)
         {
             parts.Add(BladeMaterial.Value.ToString());
@@ -116,15 +140,15 @@ public class DefectClassification
         {
             parts.Add(AuxiliaryComponentType.Value.ToString());
         }
-        
+
         parts.Add(GetDefectTypeString());
-        
+
         var subtype = GetDefectSubtypeString();
         if (!string.IsNullOrEmpty(subtype))
         {
             parts.Add(subtype);
         }
-        
+
         return string.Join(" > ", parts);
     }
 }

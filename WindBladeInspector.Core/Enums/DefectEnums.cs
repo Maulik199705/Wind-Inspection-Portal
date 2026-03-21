@@ -1,3 +1,6 @@
+
+using WindBladeInspector.Core.Enums;
+
 namespace WindBladeInspector.Core.Enums;
 
 /// <summary>

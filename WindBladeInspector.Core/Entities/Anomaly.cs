@@ -187,4 +187,12 @@ public class Anomaly
             HeightCm = height;
         }
     }
+
+    /// <summary>
+    /// Ensure DefectSubtype is set during anomaly creation.
+    /// </summary>
+    public void ValidateClassification()
+    {
+        Classification?.EnsureSubtype();
+    }
 }

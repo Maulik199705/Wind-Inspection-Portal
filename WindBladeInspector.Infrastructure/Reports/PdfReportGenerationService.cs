@@ -4,10 +4,11 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using WindBladeInspector.Core.Entities;
+using WindBladeInspector.Core.Enums;
 using WindBladeInspector.Core.Interfaces;
 using WindBladeInspector.Core.Models;
 using WindBladeInspector.Infrastructure.Reports.Components;
@@ -35,6 +36,8 @@ public sealed class PdfReportGenerationService : IReportGenerationService
     internal const string DarkGray = "#333333";
     internal const string LightGray = "#F0F0F0";
     internal const string White = "#FFFFFF";
+
+    public static object DefectSubtype { get; private set; }
 
     public PdfReportGenerationService(
         IHostEnvironment environment,
@@ -264,17 +267,334 @@ public sealed class PdfReportGenerationService : IReportGenerationService
     {
         var list = new List<DefectEntry>();
         int n = 1;
+
         foreach (var viewOrder in new[] { "LE", "PS", "SS", "TE" })
         {
             var view = blade.Views.FirstOrDefault(v => v.Side == viewOrder);
             if (view == null) continue;
+
             foreach (var img in view.Images.OrderBy(i => i.SequenceOrder))
-                foreach (var a in img.Anomalies.OrderByDescending(a => a.Severity))
+            {
+                foreach (var anomaly in img.Anomalies.OrderByDescending(a => a.Severity))
                 {
-                    string dId = $"120D{blade.SerialNumber}{n:D2}";
-                    list.Add(new DefectEntry(a, img.ImageUrl, view.Side, n++, dId));
+
+                    // Ensure Classification is populated
+                    if (anomaly.Classification != null)
+                    {
+
+                        switch (anomaly.Classification.BladeMaterial)
+                        {
+                            case BladeMaterial.Surface:
+                                switch ((SurfaceDefectType)anomaly.Classification.DefectType)
+                                {
+                                    case SurfaceDefectType.Discoloration:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)SurfaceDiscolorationSubtype.Mechanical;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((SurfaceDiscolorationSubtype)anomaly.Classification.DefectSubtype)
+                                            {
+                                                case SurfaceDiscolorationSubtype.Mechanical:
+                                                    // Handle Mechanical subtype
+                                                    break;
+                                                case SurfaceDiscolorationSubtype.Scorch:
+                                                    // Handle Scorch subtype
+                                                    break;
+                                                case SurfaceDiscolorationSubtype.IceContamination:
+                                                    // Handle Ice Contamination subtype
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = null; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+
+                                            // Assign a default subtype if necessary
+                                            anomaly.Classification.DefectSubtype = (int?)SurfaceDiscolorationSubtype.Mechanical;
+                                        }
+                                        break;
+
+                                    case SurfaceDefectType.Erosion:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)SurfaceErosionSubtype.Chip;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((SurfaceErosionSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case SurfaceErosionSubtype.Chip:
+                                                    // Handle Chip subtype
+                                                    break;
+                                                case SurfaceErosionSubtype.Flaking:
+                                                    // Handle Flaking subtype
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = null; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = null;
+                                        }
+                                        break;
+
+                                    default:
+                                        anomaly.Classification.DefectSubtype = null; // No subtype
+                                        break;
+                                }
+                                break;
+
+                            case BladeMaterial.TopCoat:
+                                switch ((TopCoatDefectType)anomaly.Classification.DefectType)
+                                {
+                                    case TopCoatDefectType.Crack:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)TopCoatCrackSubtype.FatigueCracks;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((TopCoatCrackSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case TopCoatCrackSubtype.FatigueCracks:
+                                                case TopCoatCrackSubtype.TLCShapedCracks:
+                                                case TopCoatCrackSubtype.SpiderWebShaped:
+                                                case TopCoatCrackSubtype.BondTransverseOnTE:
+                                                case TopCoatCrackSubtype.BondLongitudinalOnTE:
+                                                case TopCoatCrackSubtype.BondTransverseOnLE:
+                                                case TopCoatCrackSubtype.BondLongitudinalOnLE:
+                                                    // Handle specific subtypes
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = (int?)TopCoatCrackSubtype.None; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)TopCoatCrackSubtype.None;
+                                        }
+                                        break;
+
+                                    case TopCoatDefectType.Pinholes:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)TopCoatPinholesSubtype.Scorch;
+                                        }
+
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((TopCoatPinholesSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case TopCoatPinholesSubtype.Scorch:
+                                                    // Handle Scorch subtype
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = (int?)TopCoatPinholesSubtype.None; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)TopCoatPinholesSubtype.None;
+                                        }
+                                        break;
+
+                                    case TopCoatDefectType.Scratch:
+                                    case TopCoatDefectType.Scorch:
+                                        anomaly.Classification.DefectSubtype = (int?)TopCoatCrackSubtype.None; // No subtypes for these
+                                        break;
+
+                                    default:
+                                        anomaly.Classification.DefectSubtype = null; // No subtype
+                                        break;
+                                }
+                                break;
+
+                            case BladeMaterial.Laminate:
+                                switch ((LaminateDefectType)anomaly.Classification.DefectType)
+                                {
+                                    case LaminateDefectType.Erosion:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.Lightning;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((LaminateErosionSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case LaminateErosionSubtype.Chip:
+                                                case LaminateErosionSubtype.Lightning:
+                                                    // Handle specific subtypes
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.None; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.None;
+                                        }
+                                        break;
+
+                                    case LaminateDefectType.Delamination:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)LaminateDelaminationSubtype.Lightning;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((LaminateDelaminationSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case LaminateDelaminationSubtype.Lightning:
+                                                    // Handle Lightning subtype
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = (int?)LaminateDelaminationSubtype.None; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)LaminateDelaminationSubtype.None;
+                                        }
+                                        break;
+
+                                    case LaminateDefectType.Scratch:
+                                        anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.None; // No subtypes for Scratch
+                                        break;
+
+                                    default:
+                                        anomaly.Classification.DefectSubtype = null; // No subtype
+                                        break;
+                                }
+                                break;
+
+                            case BladeMaterial.Structure:
+                                switch ((StructureDefectType)anomaly.Classification.DefectType)
+                                {
+                                    case StructureDefectType.Crack:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)StructureCrackSubtype.Transverse;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((StructureCrackSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case StructureCrackSubtype.Transverse:
+                                                case StructureCrackSubtype.Longitudinal:
+                                                case StructureCrackSubtype.TLCShapedCracks:
+                                                case StructureCrackSubtype.Other:
+                                                case StructureCrackSubtype.TrailingTransverse:
+                                                case StructureCrackSubtype.Diagonal:
+                                                case StructureCrackSubtype.Surface:
+                                                    // Handle specific subtypes
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = null; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = null;
+                                        }
+                                        break;
+
+                                    case StructureDefectType.Delamination:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)StructureDelaminationSubtype.Edge;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((StructureDelaminationSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case StructureDelaminationSubtype.Edge:
+                                                case StructureDelaminationSubtype.Lightning:
+                                                case StructureDelaminationSubtype.NonLightning:
+                                                    // Handle specific subtypes
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = null; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = null;
+                                        }
+                                        break;
+
+                                    case StructureDefectType.Erosion:
+                                    case StructureDefectType.Hole:
+                                        anomaly.Classification.DefectSubtype = (int?)StructureCrackSubtype.Other; // No specific subtypes
+                                        break;
+
+                                    default:
+                                        anomaly.Classification.DefectSubtype = null; // No subtype
+                                        break;
+                                }
+                                break;
+
+                            case BladeMaterial.Through:
+                                switch ((ThroughDefectType)anomaly.Classification.DefectType)
+                                {
+                                    case ThroughDefectType.Bondline:
+                                        if (!anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)ThroughBondlineSubtype.Crushed;
+                                        }
+                                        if (anomaly.Classification.DefectSubtype.HasValue)
+                                        {
+                                            switch ((ThroughBondlineSubtype)anomaly.Classification.DefectSubtype.Value)
+                                            {
+                                                case ThroughBondlineSubtype.Crushed:
+                                                case ThroughBondlineSubtype.OpenTip:
+                                                    // Handle specific subtypes
+                                                    break;
+                                                default:
+                                                    anomaly.Classification.DefectSubtype = (int?)ThroughBondlineSubtype.None; // No subtype
+                                                    break;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            anomaly.Classification.DefectSubtype = (int?)ThroughBondlineSubtype.None;
+                                        }
+                                        break;
+
+                                    case ThroughDefectType.Erosion:
+                                        anomaly.Classification.DefectSubtype = (int?)ThroughBondlineSubtype.None; // No subtypes for Erosion
+                                        break;
+
+                                    default:
+                                        anomaly.Classification.DefectSubtype = null; // No subtype
+                                        break;
+                                }
+                                break;
+
+                            default:
+                                anomaly.Classification.DefectType = 0; // Default or unknown type
+                                anomaly.Classification.DefectSubtype = null; // No subtype
+                                break;
+                        }
+                    }
+
+                    string defectId = $"120D{blade.SerialNumber}{n:D2}";
+                    list.Add(new DefectEntry(anomaly, img.ImageUrl, view.Side, n++, defectId));
                 }
+            }
         }
+
         return list;
     }
 }
