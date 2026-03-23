@@ -436,10 +436,10 @@
     position: relative;
 }
 
-/* panel-content fills remaining space and clips when collapsed */
 .blade-schematic-panel .panel-content {
+    order: 1;
     flex: 1;
-    min-width: 0;           /* allow shrink below natural width */
+    min-width: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 15px;
@@ -450,9 +450,14 @@
     opacity: 1;
 }
 .blade-schematic-panel.collapsed .panel-content {
-    opacity: 0;
-    visibility: hidden;     /* hidden keeps layout space but removes interaction */
+    order: 1;
+    flex: 0 0 0px;          /* shrinks to zero — yields all space to the button */
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
     overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
     pointer-events: none;
 }
 
@@ -471,6 +476,7 @@
 }
 
 .damage-details-panel .panel-content {
+    order: 1;
     flex: 1;
     min-width: 0;
     overflow-y: auto;
@@ -481,27 +487,28 @@
     opacity: 1;
 }
 .damage-details-panel.collapsed .panel-content {
+    order: 1;
+    flex: 0 0 0px;          /* shrinks to zero — yields all space to the button */
+    min-width: 0;
+    max-width: 0;
+    padding: 0;
+    overflow: hidden;
     opacity: 0;
     visibility: hidden;
-    overflow: hidden;
     pointer-events: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   COLLAPSE TOGGLE BUTTONS
-   These are siblings of .panel-content, NOT children of it.
-   They are always rendered and always interactive.
+   COLLAPSE TOGGLE BUTTONS — always order:2, always 36px, always clickable
 ═══════════════════════════════════════════════════════════════════ */
 .panel-collapse-btn {
-    /* fixed 36px strip — the grid column minimum */
+    order: 2;
+    flex: 0 0 36px;         /* never shrinks, never grows */
     width: 36px;
     min-width: 36px;
     max-width: 36px;
-    flex-shrink: 0;
     background: #1a1a1a;
     border: none;
-    border-top: none;
-    border-bottom: none;
     color: #0f0;
     font-size: 0.8rem;
     cursor: pointer;
@@ -510,13 +517,12 @@
     justify-content: center;
     transition: background 0.2s, color 0.2s;
     z-index: 10;
+    position: relative;
 }
 .panel-collapse-btn:hover { background: #252525; color: #fff; }
 
-/* Left panel: toggle sits on the RIGHT edge of the sidebar */
-.left-collapse-btn  { order: 2; border-left:  1px solid #333; }
-/* Right panel: toggle sits on the LEFT edge of the sidebar */
-.right-collapse-btn { order: 2; border-right: 1px solid #333; }
+.left-collapse-btn  { border-left:  1px solid #333; }
+.right-collapse-btn { border-right: 1px solid #333; }
 
 /* ═══════════════════════════════════════════════════════════════════
    CENTER PANEL
@@ -1032,34 +1038,41 @@
     }
 
     [JSInvokable]
-    public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
+   public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
+{
+    State.CurrentWidthPx = width;
+    State.CurrentHeightPx = height;
+    State.CurrentWidthPct = (width / refWidth) * 100;
+    State.CurrentHeightPct = (height / refHeight) * 100;
+    State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+
+    // Scale factors: pixels per cm (consistent with polygon method)
+    double scaleX = refWidth / 100.0;
+    double scaleY = refHeight / 100.0;
+
+    // Physical dimensions and area in cm
+    double widthCm = width / scaleX;
+    double heightCm = height / scaleY;
+    double areaCm2 = (width * height) / (scaleX * scaleY);  // Pixel area scaled to cm²
+
+    State.CurrentAnomaly = new Anomaly
     {
-        State.CurrentWidthPx        = width;
-        State.CurrentHeightPx       = height;
-        State.CurrentWidthPct       = (width  / refWidth)  * 100;
-        State.CurrentHeightPct      = (height / refHeight) * 100;
-        State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
-
-        double widthCm  = State.CurrentWidthPct;
-        double heightCm = State.CurrentHeightPct;
-
-        State.CurrentAnomaly = new Anomaly
+        AnomalyId = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
+        RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
+        BladeSide = State.SelectedView ?? "PS",
+        WidthCm = widthCm,
+        HeightCm = heightCm,
+        AreaCm2 = areaCm2,  // Now correctly set to cm²
+        Type = "Other",
+        Classification = null,
+        Coordinates = new ImageCoordinates
         {
-            AnomalyId      = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
-            RadiusMeters   = State.SelectedImage?.PositionMeters ?? 0,
-            BladeSide      = State.SelectedView ?? "PS",
-            AreaCm2        = widthCm * heightCm,
-            WidthCm        = widthCm,
-            Type           = "Other",
-            Classification = null,
-            Coordinates    = new ImageCoordinates
-            {
-                X = x, Y = y, Width = width, Height = height,
-                ReferenceWidth = refWidth, ReferenceHeight = refHeight
-            }
-        };
-        StateHasChanged();
-    }
+            X = x, Y = y, Width = width, Height = height,
+            ReferenceWidth = refWidth, ReferenceHeight = refHeight
+        }
+    };
+    StateHasChanged();
+}
 
     [JSInvokable]
     public void ReceiveZoomChange(double newZoom)
@@ -1106,51 +1119,65 @@
     }
 
     [JSInvokable]
-    public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area,
-        double boundingWidth, double boundingHeight, double refWidth, double refHeight)
+   public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area,
+    double boundingWidth, double boundingHeight, double refWidth, double refHeight)
+{
+    if (xCoords.Length != 4 || yCoords.Length != 4)
     {
-        if (xCoords.Length != 4 || yCoords.Length != 4)
-        {
-            Logger.LogWarning("Invalid polygon selection: expected 4 points");
-            return;
-        }
-
-        var rectPoints   = ConvertToRectangle(xCoords, yCoords);
-        var dims         = CalculateRectangleDimensions(rectPoints);
-        var polygonPoints = new List<double>();
-        for (int i = 0; i < 4; i++) { polygonPoints.Add(rectPoints[i].x); polygonPoints.Add(rectPoints[i].y); }
-
-        State.CurrentWidthPx        = dims.width;
-        State.CurrentHeightPx       = dims.height;
-        State.CurrentWidthPct       = (dims.width  / refWidth)  * 100;
-        State.CurrentHeightPct      = (dims.height / refHeight) * 100;
-        State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
-
-        double widthCm  = State.CurrentWidthPct;
-        double heightCm = State.CurrentHeightPct;
-
-        State.CurrentAnomaly = new Anomaly
-        {
-            AnomalyId      = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
-            RadiusMeters   = State.SelectedImage?.PositionMeters ?? 0,
-            BladeSide      = State.SelectedView ?? "PS",
-            AreaCm2        = widthCm * heightCm,
-            WidthCm        = widthCm,
-            Type           = "Other",
-            Classification = null,
-            Coordinates    = new ImageCoordinates
-            {
-                PolygonPoints   = polygonPoints,
-                ReferenceWidth  = refWidth,
-                ReferenceHeight = refHeight,
-                X      = rectPoints.Min(p => p.x),
-                Y      = rectPoints.Min(p => p.y),
-                Width  = dims.width,
-                Height = dims.height
-            }
-        };
-        StateHasChanged();
+        Logger.LogWarning("Invalid polygon selection: expected 4 points");
+        return;
     }
+
+    var rectPoints = ConvertToRectangle(xCoords, yCoords);
+    var dims = CalculateRectangleDimensions(rectPoints);
+    var polygonPoints = new List<double>();
+    for (int i = 0; i < 4; i++) 
+    { 
+        polygonPoints.Add(rectPoints[i].x); 
+        polygonPoints.Add(rectPoints[i].y); 
+    }
+
+    // Scale factors: pixels per cm
+    double scaleX = refWidth / 100.0;   // since 100% = refWidth pixels
+    double scaleY = refHeight / 100.0;
+
+    // Physical dimensions in cm (using bounding box)
+    double widthCm = dims.width / scaleX;
+    double heightCm = dims.height / scaleY;
+    
+    // Physical area in cm² (preferred: use passed area, scaled)
+    double areaCm2 = area / (scaleX * scaleY);
+
+    State.CurrentWidthPx = dims.width;
+    State.CurrentHeightPx = dims.height;
+    State.CurrentWidthPct = (dims.width / refWidth) * 100;
+    State.CurrentHeightPct = (dims.height / refHeight) * 100;
+    State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+
+    State.CurrentAnomaly = new Anomaly
+    {
+        AnomalyId = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
+        RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
+        BladeSide = State.SelectedView ?? "PS",
+        WidthCm = widthCm,
+        HeightCm = heightCm,
+        AreaCm2 = areaCm2,  // Now correctly scaled to cm²
+        Type = "Other",
+        Classification = null,
+        Coordinates = new ImageCoordinates
+        {
+            PolygonPoints = polygonPoints,
+            ReferenceWidth = refWidth,
+            ReferenceHeight = refHeight,
+            X = rectPoints.Min(p => p.x),
+            Y = rectPoints.Min(p => p.y),
+            Width = dims.width,
+            Height = dims.height,
+        }
+    };
+    StateHasChanged();
+}
+
 
     private (double x, double y)[] ConvertToRectangle(double[] xCoords, double[] yCoords)
     {

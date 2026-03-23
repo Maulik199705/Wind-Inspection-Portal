@@ -25,7 +25,9 @@ internal sealed class DefectDetailComponent
     public void Compose(IContainer container)
     {
         // Ensure HeightCm is up-to-date from coordinates before rendering
-        _defect.Anomaly?.UpdateHeightFromCoordinates();
+        // _defect.Anomaly?.UpdateHeightFromCoordinates();
+        _defect.Anomaly?.UpdatePhysicalDimensionsFromCoordinates();
+        _defect.Anomaly.AreaCm2 = _defect.Anomaly.WidthCm * _defect.Anomaly.HeightCm;
 
         container.Column(col =>
         {
@@ -87,6 +89,7 @@ internal sealed class DefectDetailComponent
                 Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
                 Row("Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
                 Row("Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
+                // Row("Area (cm²)", _defect.Anomaly.AreaCm2> 0 ? _defect.Anomaly.AreaCm2.ToString();
                 Row("Severity", _defect.Anomaly.Severity.ToString());
             });
         });

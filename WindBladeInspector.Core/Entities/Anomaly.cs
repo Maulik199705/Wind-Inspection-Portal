@@ -78,6 +78,20 @@ public class ImageCoordinates
     }
 
     /// <summary>
+    /// Get area in cm² using reference scaling.
+    /// </summary>
+    public double GetAreaCm2()
+    {
+        if (ReferenceWidth <= 0 || ReferenceHeight <= 0) return 0;
+
+        double scaleX = ReferenceWidth / 100.0;
+        double scaleY = ReferenceHeight / 100.0;
+        double pixelArea = GetAreaInPixels();
+
+        return pixelArea / (scaleX * scaleY);
+    }
+
+    /// <summary>
     /// Get bounding box dimensions for display purposes.
     /// </summary>
     public (double width, double height) GetBoundingBoxDimensions()
@@ -101,6 +115,20 @@ public class ImageCoordinates
         }
 
         return (Width, Height);
+    }
+
+    /// <summary>
+    /// Get bounding box dimensions in cm.
+    /// </summary>
+    public (double widthCm, double heightCm) GetBoundingBoxDimensionsCm()
+    {
+        if (ReferenceWidth <= 0 || ReferenceHeight <= 0) return (0, 0);
+
+        var (widthPx, heightPx) = GetBoundingBoxDimensions();
+        double scaleX = ReferenceWidth / 100.0;
+        double scaleY = ReferenceHeight / 100.0;
+
+        return (widthPx / scaleX, heightPx / scaleY);
     }
 }
 
@@ -145,7 +173,7 @@ public class Anomaly
     public double WidthCm { get; set; }
 
     /// <summary>Height in centimeters.</summary>
-    public double HeightCm { get; set; } = 0; // Default to 0 if not set
+    public double HeightCm { get; set; } = 0;
 
     /// <summary>Part number/identifier.</summary>
     public int Part { get; set; }
@@ -177,15 +205,34 @@ public class Anomaly
     }
 
     /// <summary>
-    /// Updates the HeightCm property based on the coordinates.
+    /// Updates ALL physical dimensions (WidthCm, HeightCm, AreaCm2) from coordinates with proper scaling.
+    /// Call this before PDF rendering or display. REPLACES UpdateHeightFromCoordinates().
+    /// </summary>
+    public void UpdatePhysicalDimensionsFromCoordinates()
+    {
+        if (Coordinates == null || Coordinates.ReferenceWidth <= 0 || Coordinates.ReferenceHeight <= 0)
+            return;
+
+        // Scale factors: pixels per cm (100% = full reference size)
+        double scaleX = Coordinates.ReferenceWidth / 100.0;
+        double scaleY = Coordinates.ReferenceHeight / 100.0;
+
+        // Update bounding box dimensions in cm
+        var (widthCm, heightCm) = Coordinates.GetBoundingBoxDimensionsCm();
+        WidthCm = widthCm;
+        HeightCm = heightCm;
+
+        // Update true area in cm² (uses Shoelace for polygons, rect for rectangles)
+        AreaCm2 = Coordinates.GetAreaCm2();
+    }
+
+    /// <summary>
+    /// [BACKWARD COMPATIBILITY] Updates only HeightCm (kept for existing code).
+    /// New code should use UpdatePhysicalDimensionsFromCoordinates().
     /// </summary>
     public void UpdateHeightFromCoordinates()
     {
-        if (Coordinates != null)
-        {
-            var (_, height) = Coordinates.GetBoundingBoxDimensions();
-            HeightCm = height;
-        }
+        UpdatePhysicalDimensionsFromCoordinates();
     }
 
     /// <summary>
@@ -194,5 +241,14 @@ public class Anomaly
     public void ValidateClassification()
     {
         Classification?.EnsureSubtype();
+    }
+
+    /// <summary>
+    /// Gets area in cm² (auto-updates if needed).
+    /// </summary>
+    public double GetAreaCm2()
+    {
+        UpdatePhysicalDimensionsFromCoordinates();
+        return AreaCm2;
     }
 }
