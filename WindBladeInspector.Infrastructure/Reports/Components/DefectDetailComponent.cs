@@ -2,10 +2,9 @@ using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 using SkiaSharp;
 using System;
-using System.Diagnostics;
+using System.IO;
 using WindBladeInspector.Core.Entities;
 using static WindBladeInspector.Infrastructure.Reports.PdfReportGenerationService;
-using WindBladeInspector.Core.Enums;
 
 namespace WindBladeInspector.Infrastructure.Reports.Components;
 
@@ -24,33 +23,31 @@ internal sealed class DefectDetailComponent
 
     public void Compose(IContainer container)
     {
-        // Ensure HeightCm is up-to-date from coordinates before rendering
-        // _defect.Anomaly?.UpdateHeightFromCoordinates();
         _defect.Anomaly?.UpdatePhysicalDimensionsFromCoordinates();
-        _defect.Anomaly.AreaCm2 = _defect.Anomaly.WidthCm * _defect.Anomaly.HeightCm;
+        if (_defect.Anomaly != null)
+        {
+            _defect.Anomaly.AreaCm2 = _defect.Anomaly.WidthCm * _defect.Anomaly.HeightCm;
+        }
 
         container.Column(col =>
         {
             col.Item().PaddingBottom(5)
-                .AlignCenter() // Center the title
+                .AlignCenter()
                 .Text($"Blade {_bladeSerial}")
-                .FontSize(14).Bold().FontColor("#4CAF50"); // Green and bold
+                .FontSize(14).Bold().FontColor("#4CAF50");
 
             col.Item().PaddingBottom(15)
-                .AlignCenter() // Center the subtitle
+                .AlignCenter()
                 .Text($"Damage {_defect.DefectNo}")
-                .FontSize(12).Bold().FontColor("#4CAF50"); // Green for secondary heading
+                .FontSize(12).Bold().FontColor("#4CAF50");
 
             // ── DYNAMIC IMAGE CONTAINER ──
             col.Item().PaddingBottom(20).AlignCenter().Element(c =>
             {
                 if (_imageBytes != null && _defect.Anomaly != null)
-
                 {
                     byte[] croppedBytes = CropAndAnnotate(_imageBytes, _defect.Anomaly) ?? _imageBytes;
                     c.MinHeight(200).MaxHeight(250).AlignCenter().AlignMiddle().Image(croppedBytes, ImageScaling.FitArea);
-                    //c.MinHeight(200).MaxHeight(250).AlignCenter().AlignMiddle().Image(Image.FromBinary(croppedBytes).FitArea());
-
                 }
                 else
                 {
@@ -63,19 +60,19 @@ internal sealed class DefectDetailComponent
             {
                 table.ColumnsDefinition(cols =>
                 {
-                    cols.ConstantColumn(160); // Label column
-                    cols.RelativeColumn();    // Value column
+                    cols.ConstantColumn(160);
+                    cols.RelativeColumn();
                 });
 
                 void Row(string lbl, string val)
                 {
-                    table.Cell().Border(2) // Increase border thickness
-                        .BorderColor("#CCCCCC") // Slightly darker border color
+                    table.Cell().Border(2)
+                        .BorderColor("#CCCCCC")
                         .Padding(8)
                         .AlignCenter()
-                        .Text(lbl).Bold().FontSize(10).FontColor("#000000"); // Black and bold for header
-                    table.Cell().Border(2) // Increase border thickness
-                        .BorderColor("#CCCCCC") // Slightly darker border color
+                        .Text(lbl).Bold().FontSize(10).FontColor("#000000");
+                    table.Cell().Border(2)
+                        .BorderColor("#CCCCCC")
                         .Padding(8)
                         .AlignCenter()
                         .Text(string.IsNullOrWhiteSpace(val) ? "None" : val).FontSize(10).FontColor("#000000");
@@ -89,16 +86,59 @@ internal sealed class DefectDetailComponent
                 Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
                 Row("Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
                 Row("Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
-                // Row("Area (cm²)", _defect.Anomaly.AreaCm2> 0 ? _defect.Anomaly.AreaCm2.ToString();
                 Row("Severity", _defect.Anomaly.Severity.ToString());
             });
         });
     }
 
-    // ── PRECISION ZOOM MATH (NO BLACK BORDERS) ──
+    // ── EXIF AUTO-ORIENTATION LOGIC (THE FIX) ──
+    private static SKBitmap? DecodeAutoOrient(byte[] imageBytes)
+    {
+        using var stream = new MemoryStream(imageBytes);
+        using var codec = SKCodec.Create(stream);
+        if (codec == null) return null;
+
+        var bitmap = SKBitmap.Decode(codec);
+        if (bitmap == null) return null;
+
+        var origin = codec.EncodedOrigin;
+        if (origin == SKEncodedOrigin.TopLeft || origin == SKEncodedOrigin.Default)
+            return bitmap; // Image is already upright
+
+        // Determine if the image needs its X and Y axes flipped
+        bool needsSwap = origin == SKEncodedOrigin.LeftTop ||
+                         origin == SKEncodedOrigin.RightTop ||
+                         origin == SKEncodedOrigin.RightBottom ||
+                         origin == SKEncodedOrigin.LeftBottom;
+
+        var rotated = new SKBitmap(needsSwap ? bitmap.Height : bitmap.Width, needsSwap ? bitmap.Width : bitmap.Height);
+        using var canvas = new SKCanvas(rotated);
+
+        canvas.Translate(rotated.Width / 2f, rotated.Height / 2f);
+
+        switch (origin)
+        {
+            case SKEncodedOrigin.TopRight: canvas.Scale(-1, 1); break;
+            case SKEncodedOrigin.BottomRight: canvas.RotateDegrees(180); break;
+            case SKEncodedOrigin.BottomLeft: canvas.Scale(1, -1); break;
+            case SKEncodedOrigin.LeftTop: canvas.RotateDegrees(90); canvas.Scale(-1, 1); break;
+            case SKEncodedOrigin.RightTop: canvas.RotateDegrees(90); break;
+            case SKEncodedOrigin.RightBottom: canvas.RotateDegrees(90); canvas.Scale(1, -1); break;
+            case SKEncodedOrigin.LeftBottom: canvas.RotateDegrees(270); break;
+        }
+
+        canvas.Translate(-bitmap.Width / 2f, -bitmap.Height / 2f);
+        canvas.DrawBitmap(bitmap, 0, 0);
+        bitmap.Dispose();
+
+        return rotated;
+    }
+
+    // ── PRECISION ZOOM MATH (100% UI MATCH) ──
     private byte[]? CropAndAnnotate(byte[] imageBytes, Anomaly anomaly)
     {
-        using var bitmap = SKBitmap.Decode(imageBytes);
+        // USE THE EXIF-AWARE DECODER INSTEAD OF RAW DECODE
+        using var bitmap = DecodeAutoOrient(imageBytes);
         if (bitmap == null) return null;
 
         var coords = anomaly.Coordinates;
@@ -131,12 +171,9 @@ internal sealed class DefectDetailComponent
         float defWidth = Math.Max(1f, maxX - minX);
         float defHeight = Math.Max(1f, maxY - minY);
 
-        // Calculate dynamic padding to keep context
         float paddingX = Math.Max(defWidth * 1.5f, 150f);
         float paddingY = Math.Max(defHeight * 1.5f, 150f);
 
-        // EXACT integer clamping strictly within the boundaries of the original image
-        // This prevents Skia from trying to read out-of-bounds pixels (which turn black)
         int cropX = (int)Math.Max(0, minX - paddingX);
         int cropY = (int)Math.Max(0, minY - paddingY);
         int cropRight = (int)Math.Min(bitmap.Width, maxX + paddingX);
@@ -151,29 +188,44 @@ internal sealed class DefectDetailComponent
         using var surface = SKSurface.Create(info);
         var canvas = surface.Canvas;
 
-        // Clear the canvas to pure white before drawing to ensure zero black edge bleeding
         canvas.Clear(SKColors.White);
 
         var sourceRect = SKRect.Create(cropX, cropY, cropW, cropH);
         var destRect = SKRect.Create(0, 0, cropW, cropH);
         canvas.DrawBitmap(bitmap, sourceRect, destRect);
 
-        // Draw the cleanly padded Red Bounding Box
         using var strokePaint = new SKPaint
         {
             Color = SKColors.Red,
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = Math.Max(2.5f, cropW / 250f),
-            IsAntialias = true
+            StrokeWidth = Math.Max(3f, cropW / 250f),
+            IsAntialias = true,
+            StrokeJoin = SKStrokeJoin.Miter
         };
 
-        var boxRect = SKRect.Create(minX - cropX, minY - cropY, defWidth, defHeight);
-        boxRect.Inflate(12, 12);
+        if (coords.IsPolygon && coords.PolygonPoints.Count >= 8)
+        {
+            using var path = new SKPath();
 
-        // Failsafe: Ensure the red box itself doesn't draw outside our cropped boundaries
-        boxRect.Intersect(SKRect.Create(5, 5, cropW - 10, cropH - 10));
+            float startX = (float)(coords.PolygonPoints[0] * scaleX) - cropX;
+            float startY = (float)(coords.PolygonPoints[1] * scaleY) - cropY;
+            path.MoveTo(startX, startY);
 
-        canvas.DrawRect(boxRect, strokePaint);
+            for (int i = 1; i < 4; i++)
+            {
+                float px = (float)(coords.PolygonPoints[i * 2] * scaleX) - cropX;
+                float py = (float)(coords.PolygonPoints[i * 2 + 1] * scaleY) - cropY;
+                path.LineTo(px, py);
+            }
+
+            path.Close();
+            canvas.DrawPath(path, strokePaint);
+        }
+        else
+        {
+            var boxRect = SKRect.Create(minX - cropX, minY - cropY, defWidth, defHeight);
+            canvas.DrawRect(boxRect, strokePaint);
+        }
 
         canvas.Flush();
         using var snapshot = surface.Snapshot();
