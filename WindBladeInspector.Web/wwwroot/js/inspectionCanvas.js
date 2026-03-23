@@ -311,13 +311,22 @@ window.inspectionCanvas = (function () {
     // ── Coordinate helpers ────────────────────────────────────────────────────
 
     function getMousePos(e) {
+        // Get the canvas's actual rendered bounding rect in the viewport.
+        // Even though the container uses CSS transform:scale(), the canvas
+        // element's own getBoundingClientRect() always returns its true
+        // rendered position and size — correctly accounting for the transform.
         const rect = canvas.getBoundingClientRect();
-        const sx = canvas.width  / rect.width;
-        const sy = canvas.height / rect.height;
-        return {
-            x: (e.clientX - rect.left) * sx,
-            y: (e.clientY - rect.top)  * sy
-        };
+
+        // rect.width / rect.height = canvas's rendered CSS size (after scale)
+        // canvas.width / canvas.height = canvas's natural pixel buffer size
+        // The ratio converts rendered pixels → natural canvas pixels.
+        const scaleX = canvas.width  / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const canvasX = (e.clientX - rect.left) * scaleX;
+        const canvasY = (e.clientY - rect.top)  * scaleY;
+
+        return { x: canvasX, y: canvasY };
     }
 
     function isPointInPolygon(pt, poly) {
