@@ -90,6 +90,7 @@
                 <tbody>
                     @foreach (var p in group)
                     {
+                        var hasImages = p.Blades.Any(b => b.Views.Any(v => v.Images.Count > 0));
                         <tr>
                             <td>@p.TurbineId</td>
                             <td>@p.Model</td>
@@ -106,21 +107,49 @@
                                 }
                             </td>
                             <td class="action-cell">
-                                <button class="resume-btn"
-                                        @onclick="@(() => Navigation.NavigateTo("/inspection/" + p.Id))">
-                                    Open
-                                </button>
-                                @if (p.DataCaptureStatus != "Complete")
-                                {
-                                    <button class="complete-btn"
-                                            @onclick="@(() => HandleMarkComplete(p.Id))">
-                                        ✔ Complete
+                                <!-- ── Workflow strip ── -->
+                                <div class="workflow-strip">
+                                    <!-- Step 1: Upload Images (always available) -->
+                                    <a class="workflow-btn upload-btn"
+                                       href="/upload/@p.Id" target="_blank"
+                                       title="Upload blade images in a new tab">
+                                        📁 Upload Images
+                                    </a>
+
+                                    <!-- Step 2: Start / Open Inspection (requires ≥1 image) -->
+                                    @if (hasImages)
+                                    {
+                                        <button class="workflow-btn inspect-btn active"
+                                                @onclick="@(() => Navigation.NavigateTo("/inspection/" + p.Id))"
+                                                title="Open inspection">
+                                            🔍 Inspect
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button class="workflow-btn inspect-btn disabled" disabled
+                                                title="Upload at least 1 image first">
+                                            🔍 Inspect
+                                        </button>
+                                    }
+
+                                    <!-- Mark complete -->
+                                    @if (p.DataCaptureStatus != "Complete")
+                                    {
+                                        <button class="complete-btn"
+                                                @onclick="@(() => HandleMarkComplete(p.Id))"
+                                                title="Mark as complete">
+                                            ✔
+                                        </button>
+                                    }
+
+                                    <!-- Delete -->
+                                    <button class="delete-btn"
+                                            @onclick="@(() => RequestDelete(p.Id, p.TurbineId))"
+                                            title="Delete project">
+                                        🗑
                                     </button>
-                                }
-                                <button class="delete-btn"
-                                        @onclick="@(() => RequestDelete(p.Id, p.TurbineId))">
-                                    🗑
-                                </button>
+                                </div>
                             </td>
                         </tr>
                     }
@@ -167,7 +196,6 @@
     font-weight: 600;
     cursor: pointer;
 }
-
 .create-btn:hover { background: #00cc6a; }
 
 .create-card {
@@ -178,10 +206,7 @@
     border: 1px solid #2a2f3a;
 }
 
-.form-row {
-    display: flex;
-    gap: 12px;
-}
+.form-row { display: flex; gap: 12px; }
 
 .form-row input {
     flex: 1;
@@ -225,29 +250,16 @@
     border-bottom: 1px solid #242a35;
 }
 
-.project-name {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: #00ff88;
-}
-
+.project-name { font-size: 1.2rem; font-weight: 600; color: #00ff88; }
 .project-count { font-size: 0.8rem; color: #777; }
 
-.turbine-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+.turbine-table { width: 100%; border-collapse: collapse; }
 
 .turbine-table th,
-.turbine-table td {
-    padding: 14px 18px;
-    text-align: left;
-}
+.turbine-table td { padding: 14px 18px; text-align: left; }
 
 .turbine-table thead { background: #1f242f; }
-
 .turbine-table tbody tr { border-top: 1px solid #242a35; }
-
 .turbine-table tbody tr:hover { background: #1c212b; }
 
 .status-badge {
@@ -256,38 +268,84 @@
     font-size: 0.75rem;
     font-weight: 600;
 }
-
 .status-badge.in-progress { background: #2a2f3a; color: #aaa; }
 .status-badge.complete    { background: rgba(0,255,136,0.15); color: #00ff88; }
 
-.action-cell {
+/* ── Action Cell ── */
+.action-cell { vertical-align: middle; }
+
+.workflow-strip {
     display: flex;
-    gap: 8px;
     align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
 }
 
-.resume-btn {
-    background: transparent;
-    border: 1px solid #00ff88;
-    color: #00ff88;
-    padding: 6px 14px;
+/* Shared workflow button base */
+.workflow-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 13px;
     border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 0.82rem;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
 }
 
-.resume-btn:hover { background: #00ff88; color: #000; }
+/* Upload button — always available, amber tone */
+.upload-btn {
+    background: rgba(255, 170, 0, 0.12);
+    border-color: #ffaa00;
+    color: #ffaa00;
+}
+.upload-btn:hover {
+    background: #ffaa00;
+    color: #000;
+    box-shadow: 0 0 10px rgba(255,170,0,0.4);
+}
+
+/* Inspect button — active state (green glow) */
+.inspect-btn.active {
+    background: rgba(0, 255, 136, 0.12);
+    border-color: #00ff88;
+    color: #00ff88;
+    animation: inspect-pulse 2.5s ease-in-out infinite;
+}
+.inspect-btn.active:hover {
+    background: #00ff88;
+    color: #000;
+    box-shadow: 0 0 14px rgba(0,255,136,0.5);
+    animation: none;
+}
+
+/* Inspect button — disabled (greyed out) */
+.inspect-btn.disabled {
+    background: transparent;
+    border-color: #333;
+    color: #444;
+    cursor: not-allowed;
+}
+
+@@keyframes inspect-pulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(0,255,136,0); border-color: #00ff88; }
+    50%       { box-shadow: 0 0 10px rgba(0,255,136,0.45); border-color: #00ff88; }
+}
 
 .complete-btn {
     background: transparent;
     border: 1px solid #00bfff;
     color: #00bfff;
-    padding: 6px 14px;
+    padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.82rem;
+    transition: all 0.2s;
 }
-
 .complete-btn:hover { background: #00bfff; color: #000; }
 
 .delete-btn {
@@ -298,11 +356,11 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.82rem;
+    transition: all 0.2s;
 }
-
 .delete-btn:hover { background: #ff4444; color: #fff; }
 
-/* ── Confirmation Modal ─────────────────────────────── */
+/* ── Confirmation Modal ── */
 .modal-backdrop {
     position: fixed;
     inset: 0;
@@ -322,25 +380,9 @@
     width: 100%;
 }
 
-.modal-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #ff4444;
-    margin-bottom: 14px;
-}
-
-.modal-body {
-    color: #ccc;
-    font-size: 0.95rem;
-    margin-bottom: 24px;
-    line-height: 1.6;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-}
+.modal-title { font-size: 1.2rem; font-weight: 700; color: #ff4444; margin-bottom: 14px; }
+.modal-body  { color: #ccc; font-size: 0.95rem; margin-bottom: 24px; line-height: 1.6; }
+.modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
 
 .cancel-btn {
     background: transparent;
@@ -350,7 +392,6 @@
     border-radius: 6px;
     cursor: pointer;
 }
-
 .cancel-btn:hover { border-color: #aaa; color: #fff; }
 
 .delete-confirm-btn {
@@ -362,7 +403,6 @@
     font-weight: 600;
     cursor: pointer;
 }
-
 .delete-confirm-btn:hover { background: #cc2222; }
 </style>
 
@@ -371,7 +411,6 @@
     private bool _showCreate = false;
     private string _searchTerm = "";
 
-    // Delete confirmation state
     private Guid? _confirmDeleteId = null;
     private string _confirmDeleteName = "";
 
@@ -390,7 +429,8 @@
             _inputModel.Client,
             _inputModel.Location);
 
-        Navigation.NavigateTo($"/inspection/{newProject.Id}");
+        // Open upload page in a new tab immediately after creation
+        Navigation.NavigateTo($"/upload/{newProject.Id}", forceLoad: false);
     }
 
     private void HandleMarkComplete(Guid id)
@@ -424,10 +464,10 @@
 
     class ProjectInputModel
     {
-        public string ParkName { get; set; } = "";
+        public string ParkName  { get; set; } = "";
         public string TurbineId { get; set; } = "";
-        public string Client { get; set; } = "";
-        public string Location { get; set; } = "";
-        public string Model { get; set; } = "";
+        public string Client    { get; set; } = "";
+        public string Location  { get; set; } = "";
+        public string Model     { get; set; } = "";
     }
 }

@@ -42,14 +42,10 @@
         </div>
     </header>
 
-    <div class="inspection-layout @(State.IsLeftPanelCollapsed ? "left-collapsed" : "") @(State.IsRightPanelCollapsed ? "right-collapsed" : "")">
+    <div class="inspection-layout @(State.IsLeftPanelCollapsed ? "left-collapsed" : "")">
 
         <!-- ═══ LEFT SIDEBAR ═══ -->
         <div class="blade-schematic-panel @(State.IsLeftPanelCollapsed ? "collapsed" : "")">
-            <!-- 
-                CRITICAL: The collapse toggle button lives OUTSIDE .panel-content
-                so it is always visible even when the panel is collapsed.
-            -->
             <button class="panel-collapse-btn left-collapse-btn"
                     @onclick="ToggleLeftPanel"
                     title="@(State.IsLeftPanelCollapsed ? "Expand" : "Collapse") Navigation">
@@ -81,7 +77,7 @@
                         <div style="display: flex; flex-wrap: wrap; gap: 6px;">
                             @foreach (var view in new[] { "PS", "SS", "LE", "TE" })
                             {
-                                var bladeView = State.SelectedBlade.Views.FirstOrDefault(v => v.Side == view);
+                                var bladeView  = State.SelectedBlade.Views.FirstOrDefault(v => v.Side == view);
                                 var imageCount = bladeView?.Images.Count ?? 0;
                                 <button class="view-selector-btn @(State.SelectedView == view ? "active" : "")"
                                         @onclick="() => SelectView(view)"
@@ -97,13 +93,114 @@
                     </div>
                 }
 
-                <!-- Upload -->
+                <!-- ── NEW DEFECT FORM (fixed in left sidebar, shown when drawing completes) ── -->
+                @if (State.CurrentAnomaly != null)
+                {
+                    <div class="nav-section new-defect-section" style="margin-top: 1rem;">
+                        <div class="new-defect-header">
+                            <span class="new-defect-title">🎯 New Defect</span>
+                            <button class="inline-close-btn" @onclick="CancelDefect" title="Cancel">✕</button>
+                        </div>
+
+                        <div class="inline-dims">
+                            <div class="dim-item">
+                                <span class="dim-label">W</span>
+                                <span class="dim-value">@State.CurrentWidthPx.ToString("F0")px</span>
+                                <span class="dim-pct">(@State.CurrentWidthPct.ToString("F1")%)</span>
+                            </div>
+                            <div class="dim-item">
+                                <span class="dim-label">H</span>
+                                <span class="dim-value">@State.CurrentHeightPx.ToString("F0")px</span>
+                                <span class="dim-pct">(@State.CurrentHeightPct.ToString("F1")%)</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Severity</label>
+                            <select class="form-select" @bind="State.CurrentAnomaly.Severity">
+                                <option value="1">1 – Cosmetic</option>
+                                <option value="2">2 – Minor</option>
+                                <option value="3">3 – Medium</option>
+                                <option value="4">4 – Serious</option>
+                                <option value="5">5 – Very Serious</option>
+                            </select>
+                        </div>
+
+                        <DefectClassificationSelector
+                            Classification="@State.CurrentAnomaly.Classification"
+                            ClassificationChanged="@OnCurrentDefectClassificationChanged" />
+
+                        <div class="form-group">
+                            <label class="form-label">Blade Side</label>
+                            <div class="readonly-field">@State.SelectedView – @GetViewLabel(State.SelectedView)</div>
+                        </div>
+
+                        <div class="inline-defect-actions">
+                            <button class="btn btn-primary" @onclick="SaveAnomaly">✔ Save</button>
+                            <button class="btn btn-danger"  @onclick="CancelDefect">✕ Cancel</button>
+                        </div>
+                    </div>
+                }
+
+                <!-- Quick Actions hint -->
                 <div class="nav-section" style="margin-top: 1rem;">
-                    <label class="btn-upload-full" for="bulkFileInput">
-                        <span style="font-size: 1.2rem;">+</span> Upload Images for @State.SelectedView
-                    </label>
-                    <InputFile OnChange="HandleBulkFileUpload" multiple style="display: none;" id="bulkFileInput" accept=".jpg,.jpeg,.png,.webp" />
+                    <div class="quick-actions-hint">
+                        <div class="hint-title">🎯 Quick Actions</div>
+                        <div class="hint-body">
+                            <div>• <strong>Click</strong> image to place point</div>
+                            <div>• <strong>4 clicks</strong> = draw defect box</div>
+                            <div>• <strong>Delete/Backspace</strong> = remove selected</div>
+                            <div>• <strong>Right-click</strong> box for options</div>
+                            <div>• <strong>ESC</strong> to cancel / deselect</div>
+                            <div>• <strong>Scroll</strong> to zoom, Alt+drag to pan</div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Generate Report -->
+                <div class="nav-section" style="margin-top: 0.5rem;">
+                    <button class="btn btn-primary" @onclick="GenerateReport"
+                            disabled="@_isGeneratingReport" style="width: 100%;">
+                        @(_isGeneratingReport ? "⏳ Generating…" : "📄 Generate Report")
+                    </button>
+                </div>
+
+                <!-- Edit selected saved defect -->
+                @if (State.SelectedAnomaly != null && State.CurrentAnomaly == null)
+                {
+                    <div class="nav-section" style="margin-top: 1rem;">
+                        <div class="nav-title">Edit Defect</div>
+                        <div class="damage-form">
+                            <div class="form-group">
+                                <label class="form-label">Severity (1–5)</label>
+                                <select class="form-select" @bind="State.SelectedAnomaly.Severity">
+                                    <option value="1">1 – Cosmetic</option>
+                                    <option value="2">2 – Minor</option>
+                                    <option value="3">3 – Medium</option>
+                                    <option value="4">4 – Serious</option>
+                                    <option value="5">5 – Very Serious</option>
+                                </select>
+                            </div>
+                            <DefectClassificationSelector
+                                Classification="@State.SelectedAnomaly.Classification"
+                                ClassificationChanged="@OnSelectedDefectClassificationChanged" />
+                            <div class="form-group">
+                                <label class="form-label">Blade Side</label>
+                                <select class="form-select" @bind="State.SelectedAnomaly.BladeSide">
+                                    <option value="PS">Pressure Side</option>
+                                    <option value="SS">Suction Side</option>
+                                    <option value="LE">Leading Edge</option>
+                                    <option value="TE">Trailing Edge</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-block" @onclick="SaveAnomaly">Update Defect</button>
+                            <button class="btn btn-block" @onclick="DeleteAnomaly"
+                                    style="margin-top: 5px; background: #442222; border-color: #663333; color: #ff9999;">
+                                Delete Defect
+                            </button>
+                        </div>
+                    </div>
+                }
 
                 <!-- Defect Summary -->
                 <div class="nav-section" style="margin-top: 1rem; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
@@ -203,7 +300,6 @@
                     <button class="btn-icon" @onclick="ZoomOut"   title="Zoom Out (-)">−</button>
                     <button class="btn-icon" @onclick="ResetView" title="Fit to Screen">⊡</button>
                     <div class="divider"></div>
-                    <!-- Fullscreen button — always rendered, toggles visual-mode class on app-container -->
                     <button class="btn-icon btn-fullscreen" @onclick="ToggleVisualMode"
                             title="@(State.IsVisualMode ? "Exit Fullscreen (Esc)" : "Fullscreen")">
                         @(State.IsVisualMode ? "✕" : "⛶")
@@ -211,7 +307,7 @@
                 </div>
             </div>
 
-            <!-- ── Canvas Area ── -->
+            <!-- ── Canvas Area (no floating defect panel here anymore) ── -->
             <div class="main-content">
                 <div class="canvas-panel">
                     <div class="canvas-container-wrapper" id="canvasViewer">
@@ -222,7 +318,7 @@
                                     <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                                 </svg>
                                 <h3>No Image Selected</h3>
-                                <p>Select or upload an image for @(State.SelectedView ?? "this view")</p>
+                                <p>Select an image from the navigation bar above</p>
                             </div>
                         }
                         else
@@ -234,171 +330,12 @@
                         }
                     </div>
                 </div>
-
-                <!-- ── INLINE DEFECT ANNOTATION PANEL ── -->
-                @if (State.CurrentAnomaly != null)
-                {
-                    <div class="inline-defect-panel">
-                        <div class="inline-defect-header">
-                            <span class="inline-defect-title">🎯 New Defect</span>
-                            <button class="inline-close-btn" @onclick="CancelDefect" title="Cancel">✕</button>
-                        </div>
-
-                        <div class="inline-dims">
-                            <div class="dim-item">
-                                <span class="dim-label">W</span>
-                                <span class="dim-value">@State.CurrentWidthPx.ToString("F0")px</span>
-                                <span class="dim-pct">(@State.CurrentWidthPct.ToString("F1")%)</span>
-                            </div>
-                            <div class="dim-item">
-                                <span class="dim-label">H</span>
-                                <span class="dim-value">@State.CurrentHeightPx.ToString("F0")px</span>
-                                <span class="dim-pct">(@State.CurrentHeightPct.ToString("F1")%)</span>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Severity</label>
-                            <select class="form-select" @bind="State.CurrentAnomaly.Severity">
-                                <option value="1">1 – Cosmetic</option>
-                                <option value="2">2 – Minor</option>
-                                <option value="3">3 – Medium</option>
-                                <option value="4">4 – Serious</option>
-                                <option value="5">5 – Very Serious</option>
-                            </select>
-                        </div>
-
-                        <DefectClassificationSelector
-                            Classification="@State.CurrentAnomaly.Classification"
-                            ClassificationChanged="@OnCurrentDefectClassificationChanged" />
-
-                        <div class="form-group">
-                            <label class="form-label">Blade Side</label>
-                            <div class="readonly-field">@State.SelectedView – @GetViewLabel(State.SelectedView)</div>
-                        </div>
-
-                        <div class="inline-defect-actions">
-                            <button class="btn btn-primary" @onclick="SaveAnomaly">✔ Save Defect</button>
-                            <button class="btn btn-danger"  @onclick="CancelDefect">✕ Cancel</button>
-                        </div>
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- ═══ RIGHT SIDEBAR ═══ -->
-        <div class="damage-details-panel @(State.IsRightPanelCollapsed ? "collapsed" : "")">
-            <!--
-                CRITICAL: The collapse toggle button lives OUTSIDE .panel-content
-                so it is always visible even when the panel is collapsed.
-            -->
-            <button class="panel-collapse-btn right-collapse-btn"
-                    @onclick="ToggleRightPanel"
-                    title="@(State.IsRightPanelCollapsed ? "Expand" : "Collapse") Details">
-                @(State.IsRightPanelCollapsed ? "◀" : "▶")
-            </button>
-
-            <div class="panel-content">
-                <!-- Quick Actions hint -->
-                <div class="quick-actions-hint">
-                    <div class="hint-title">🎯 Quick Actions</div>
-                    <div class="hint-body">
-                        <div>• <strong>Click</strong> image to place point</div>
-                        <div>• <strong>4 clicks</strong> = draw defect box</div>
-                        <div>• <strong>Delete/Backspace</strong> = remove selected</div>
-                        <div>• <strong>Right-click</strong> box for options</div>
-                        <div>• <strong>ESC</strong> to cancel / deselect</div>
-                        <div>• <strong>Scroll</strong> to zoom, Alt+drag to pan</div>
-                    </div>
-                </div>
-
-                <!-- Report -->
-                <div style="margin-bottom: 1rem;">
-                    <button class="btn btn-primary" @onclick="GenerateReport"
-                            disabled="@_isGeneratingReport" style="width: 100%;">
-                        @(_isGeneratingReport ? "⏳ Generating…" : "📄 Generate Report")
-                    </button>
-                </div>
-
-                <!-- Image Details -->
-                <div class="collapsible-section">
-                    <button class="collapsible-header" @onclick="() => _imageDetailsOpen = !_imageDetailsOpen">
-                        <span>Image Details</span>
-                        <span class="chevron">@(_imageDetailsOpen ? "▲" : "▼")</span>
-                    </button>
-                    @if (_imageDetailsOpen)
-                    {
-                        <div class="collapsible-body">
-                            @if (State.SelectedImage != null)
-                            {
-                                <div class="image-info-card">
-                                    <div class="info-row"><span class="info-label">View</span><span class="info-value">@State.SelectedView</span></div>
-                                    <div class="info-row"><span class="info-label">Image #</span><span class="info-value">@(State.SelectedImage.SequenceOrder + 1)</span></div>
-                                    <div class="info-row"><span class="info-label">Defects</span><span class="info-value">@State.SelectedImage.Anomalies.Count</span></div>
-                                </div>
-                            }
-                            else
-                            {
-                                <p class="empty-state-text">No image selected</p>
-                            }
-                        </div>
-                    }
-                </div>
-
-                <!-- Saved Defects / Edit -->
-                <div class="collapsible-section">
-                    <button class="collapsible-header" @onclick="() => _savedDefectsOpen = !_savedDefectsOpen">
-                        <span>Defect Annotation</span>
-                        <span class="chevron">@(_savedDefectsOpen ? "▲" : "▼")</span>
-                    </button>
-                    @if (_savedDefectsOpen)
-                    {
-                        <div class="collapsible-body">
-                            @if (State.SelectedAnomaly != null)
-                            {
-                                <div class="damage-form">
-                                    <div class="form-group">
-                                        <label class="form-label">Severity (1–5)</label>
-                                        <select class="form-select" @bind="State.SelectedAnomaly.Severity">
-                                            <option value="1">1 – Cosmetic</option>
-                                            <option value="2">2 – Minor</option>
-                                            <option value="3">3 – Medium</option>
-                                            <option value="4">4 – Serious</option>
-                                            <option value="5">5 – Very Serious</option>
-                                        </select>
-                                    </div>
-                                    <DefectClassificationSelector
-                                        Classification="@State.SelectedAnomaly.Classification"
-                                        ClassificationChanged="@OnSelectedDefectClassificationChanged" />
-                                    <div class="form-group">
-                                        <label class="form-label">Blade Side</label>
-                                        <select class="form-select" @bind="State.SelectedAnomaly.BladeSide">
-                                            <option value="PS">Pressure Side</option>
-                                            <option value="SS">Suction Side</option>
-                                            <option value="LE">Leading Edge</option>
-                                            <option value="TE">Trailing Edge</option>
-                                        </select>
-                                    </div>
-                                    <button class="btn btn-primary btn-block" @onclick="SaveAnomaly">Update Defect</button>
-                                    <button class="btn btn-block" @onclick="DeleteAnomaly"
-                                            style="margin-top: 5px; background: #442222; border-color: #663333; color: #ff9999;">
-                                        Delete Defect
-                                    </button>
-                                </div>
-                            }
-                            else
-                            {
-                                <p class="empty-state-text" style="padding: 1rem;">Select a saved defect on the canvas to edit it</p>
-                            }
-                        </div>
-                    }
-                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- ── Visual Mode overlay — floating controls always rendered, shown via CSS only in visual-mode ── -->
+<!-- ── Visual Mode overlay ── -->
 <div class="visual-controls">
     <button class="floating-btn" @onclick="PrevImage"         title="Previous">❮</button>
     <button class="floating-btn" @onclick="ZoomOut"           title="Zoom Out">−</button>
@@ -413,19 +350,15 @@
 ═══════════════════════════════════════════════════════════════════ */
 .inspection-layout {
     display: grid;
-    grid-template-columns: 250px 1fr 300px;
+    grid-template-columns: 260px 1fr;
     height: calc(100vh - 60px);
     overflow: hidden;
     transition: grid-template-columns 0.25s ease;
 }
-.inspection-layout.left-collapsed                       { grid-template-columns: 36px 1fr 300px; }
-.inspection-layout.right-collapsed                      { grid-template-columns: 250px 1fr 36px; }
-.inspection-layout.left-collapsed.right-collapsed       { grid-template-columns: 36px 1fr 36px; }
+.inspection-layout.left-collapsed { grid-template-columns: 36px 1fr; }
 
 /* ═══════════════════════════════════════════════════════════════════
    LEFT SIDEBAR
-   flex-direction: row  →  [panel-content] [toggle-button]
-   The toggle button is the LAST flex child (order:2) and always visible.
 ═══════════════════════════════════════════════════════════════════ */
 .blade-schematic-panel {
     background: #1e1e1e;
@@ -450,8 +383,7 @@
     opacity: 1;
 }
 .blade-schematic-panel.collapsed .panel-content {
-    order: 1;
-    flex: 0 0 0px;          /* shrinks to zero — yields all space to the button */
+    flex: 0 0 0px;
     min-width: 0;
     max-width: 0;
     padding: 0;
@@ -461,49 +393,56 @@
     pointer-events: none;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   RIGHT SIDEBAR
-   flex-direction: row-reverse  →  [toggle-button] [panel-content]
-   The toggle button is the LAST flex child (order:2) and always visible.
-═══════════════════════════════════════════════════════════════════ */
-.damage-details-panel {
-    background: #1e1e1e;
+/* ── New Defect section — green highlight to draw attention ── */
+.new-defect-section {
+    background: rgba(0, 255, 0, 0.04);
+    border: 1px solid #0f0;
+    border-radius: 6px;
+    padding: 10px;
+}
+
+.new-defect-header {
     display: flex;
-    flex-direction: row-reverse;
-    overflow: hidden;
-    border-left: 1px solid #2a2a2a;
-    position: relative;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
 }
+.new-defect-title { font-size: 0.9rem; font-weight: bold; color: #0f0; }
 
-.damage-details-panel .panel-content {
-    order: 1;
-    flex: 1;
-    min-width: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 15px;
-    transition: opacity 0.2s, visibility 0.2s;
-    visibility: visible;
-    opacity: 1;
+.inline-close-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #aaa;
+    border-radius: 4px;
+    padding: 2px 7px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: all 0.15s;
 }
-.damage-details-panel.collapsed .panel-content {
-    order: 1;
-    flex: 0 0 0px;          /* shrinks to zero — yields all space to the button */
-    min-width: 0;
-    max-width: 0;
-    padding: 0;
-    overflow: hidden;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
+.inline-close-btn:hover { background: #442222; border-color: #ff4444; color: #fff; }
+
+.inline-dims {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+    background: #111;
+    padding: 6px 8px;
+    border-radius: 4px;
 }
+.dim-item  { display: flex; align-items: baseline; gap: 3px; }
+.dim-label { color: #666; font-size: 0.72rem; }
+.dim-value { color: #0f0; font-weight: bold; font-size: 0.8rem; }
+.dim-pct   { color: #555; font-size: 0.68rem; }
+
+.inline-defect-actions { display: flex; gap: 8px; margin-top: 10px; }
+.inline-defect-actions .btn { flex: 1; }
 
 /* ═══════════════════════════════════════════════════════════════════
-   COLLAPSE TOGGLE BUTTONS — always order:2, always 36px, always clickable
+   COLLAPSE BUTTON
 ═══════════════════════════════════════════════════════════════════ */
 .panel-collapse-btn {
     order: 2;
-    flex: 0 0 36px;         /* never shrinks, never grows */
+    flex: 0 0 36px;
     width: 36px;
     min-width: 36px;
     max-width: 36px;
@@ -520,9 +459,7 @@
     position: relative;
 }
 .panel-collapse-btn:hover { background: #252525; color: #fff; }
-
-.left-collapse-btn  { border-left:  1px solid #333; }
-.right-collapse-btn { border-right: 1px solid #333; }
+.left-collapse-btn { border-left: 1px solid #333; }
 
 /* ═══════════════════════════════════════════════════════════════════
    CENTER PANEL
@@ -554,7 +491,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   CANVAS WRAPPER / CONTAINER
+   CANVAS
 ═══════════════════════════════════════════════════════════════════ */
 .canvas-container-wrapper {
     flex: 1;
@@ -566,14 +503,13 @@
 
 .canvas-container {
     position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;  /* JS sets translate+scale */
+    top: 0; left: 0;
+    transform-origin: 0 0;
     line-height: 0;
     box-shadow: 0 0 40px rgba(0,0,0,0.6);
 }
 
-.canvas-container img  { display: block; }
+.canvas-container img { display: block; }
 .canvas-container canvas {
     display: block;
     position: absolute;
@@ -598,62 +534,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   INLINE DEFECT ANNOTATION PANEL
+   SHARED FORM HELPERS
 ═══════════════════════════════════════════════════════════════════ */
-.inline-defect-panel {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 300px;
-    max-height: calc(100% - 24px);
-    overflow-y: auto;
-    background: rgba(16, 24, 36, 0.97);
-    border: 2px solid #0f0;
-    border-radius: 8px;
-    padding: 14px;
-    z-index: 100;
-    box-shadow: 0 8px 32px rgba(0,255,0,0.15), 0 2px 12px rgba(0,0,0,0.7);
-    backdrop-filter: blur(4px);
-}
-
-.inline-defect-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-}
-.inline-defect-title { font-size: 0.95rem; font-weight: bold; color: #0f0; }
-
-.inline-close-btn {
-    background: none;
-    border: 1px solid #444;
-    color: #aaa;
-    border-radius: 4px;
-    padding: 2px 7px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    transition: all 0.15s;
-}
-.inline-close-btn:hover { background: #442222; border-color: #ff4444; color: #fff; }
-
-.inline-dims {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
-    background: #111;
-    padding: 8px 10px;
-    border-radius: 4px;
-}
-.dim-item  { display: flex; align-items: baseline; gap: 4px; }
-.dim-label { color: #666; font-size: 0.75rem; }
-.dim-value { color: #0f0; font-weight: bold; font-size: 0.85rem; }
-.dim-pct   { color: #555; font-size: 0.7rem; }
-
-.inline-defect-actions { display: flex; gap: 8px; margin-top: 12px; }
-.inline-defect-actions .btn { flex: 1; }
-.btn-danger             { background: #442222; border: 1px solid #663333; color: #ff9999; }
-.btn-danger:hover       { background: #663333; border-color: #ff4444; color: #fff; }
-
 .readonly-field {
     background: #1a1a1a;
     border: 1px solid #333;
@@ -664,33 +546,13 @@
     font-size: 0.85rem;
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   COLLAPSIBLE SECTIONS (right panel accordion)
-═══════════════════════════════════════════════════════════════════ */
-.collapsible-section  { border: 1px solid #2a2a2a; border-radius: 4px; margin-bottom: 10px; overflow: hidden; }
-.collapsible-header {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #252525;
-    border: none;
-    color: #ccc;
-    padding: 10px 12px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s;
-    text-align: left;
-}
-.collapsible-header:hover { background: #2e2e2e; color: #0f0; }
-.chevron       { font-size: 0.7rem; color: #0f0; }
-.collapsible-body { padding: 10px; background: #1a1a1a; }
+.btn-danger             { background: #442222; border: 1px solid #663333; color: #ff9999; }
+.btn-danger:hover       { background: #663333; border-color: #ff4444; color: #fff; }
 
 /* ═══════════════════════════════════════════════════════════════════
-   QUICK ACTIONS HINT
+   QUICK ACTIONS
 ═══════════════════════════════════════════════════════════════════ */
-.quick-actions-hint { background: #1a2332; border: 1px solid #0f0; border-radius: 4px; padding: 10px; margin-bottom: 12px; }
+.quick-actions-hint { background: #1a2332; border: 1px solid #0f0; border-radius: 4px; padding: 10px; margin-bottom: 4px; }
 .hint-title         { font-size: 0.8rem; color: #0f0; font-weight: bold; margin-bottom: 6px; }
 .hint-body          { font-size: 0.72rem; color: #aaa; line-height: 1.7; }
 
@@ -771,24 +633,16 @@
     padding: 5px 10px; border-radius: 4px; cursor: pointer;
     font-size: 0.9rem; transition: all 0.15s;
 }
-.btn-icon:hover        { background: #3a3a3a; color: #0f0; border-color: #0f0; }
-/* Give the fullscreen button a slightly more prominent look */
-.btn-fullscreen        { font-size: 1.1rem; padding: 4px 10px; }
-.btn-fullscreen:hover  { background: #0f0; color: #000; border-color: #0f0; }
+.btn-icon:hover       { background: #3a3a3a; color: #0f0; border-color: #0f0; }
+.btn-fullscreen       { font-size: 1.1rem; padding: 4px 10px; }
+.btn-fullscreen:hover { background: #0f0; color: #000; border-color: #0f0; }
 
 .zoom-level { color: #aaa; font-size: 0.8rem; min-width: 42px; text-align: center; }
 .divider    { width: 1px; height: 20px; background: #333; margin: 0 4px; }
 
 /* ═══════════════════════════════════════════════════════════════════
-   MISC SHARED
+   MISC
 ═══════════════════════════════════════════════════════════════════ */
-.btn-upload-full {
-    background: #0f0; color: #000; border: 2px solid #0f0;
-    padding: 10px 14px; border-radius: 6px; cursor: pointer;
-    font-weight: 600; display: block; text-align: center; transition: all 0.2s;
-}
-.btn-upload-full:hover { background: #00cc00; box-shadow: 0 4px 8px rgba(0,255,0,0.3); }
-
 .view-selector-btn {
     background: #2a2a2a; border: 2px solid #444; color: #aaa;
     padding: 4px 6px; border-radius: 4px; cursor: pointer;
@@ -800,9 +654,7 @@
 .empty-state-text { color: #555; font-size: 0.8rem; text-align: center; padding: 8px; }
 
 /* ═══════════════════════════════════════════════════════════════════
-   FULLSCREEN / VISUAL MODE
-   The .visual-mode class is applied to .app-container.
-   It takes over the entire viewport and hides everything except the canvas.
+   FULLSCREEN
 ═══════════════════════════════════════════════════════════════════ */
 .visual-mode {
     position: fixed;
@@ -813,47 +665,28 @@
     flex-direction: column;
 }
 
-/* Hide chrome we don't need in fullscreen */
-.visual-mode .app-header          { display: none !important; }
+.visual-mode .app-header            { display: none !important; }
 .visual-mode .blade-schematic-panel { display: none !important; }
-.visual-mode .damage-details-panel  { display: none !important; }
 .visual-mode .inspection-header     { display: none !important; }
 .visual-mode .image-navigation-bar  { display: none !important; }
 
-/* Force the grid to give the center column 100% */
-.visual-mode .inspection-layout {
-    display: flex !important;   /* override grid entirely */
-    height: 100vh;
-}
+.visual-mode .inspection-layout { display: flex !important; height: 100vh; }
 
-/* Center column fills all available space */
 .visual-mode .center-panel {
-    flex: 1;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+    flex: 1; width: 100%; height: 100%;
+    display: flex; flex-direction: column;
 }
 
-.visual-mode .main-content {
-    flex: 1;
-    height: 100%;
-}
+.visual-mode .main-content { flex: 1; height: 100%; }
 
-/* The wrapper must fill the full viewport in fullscreen */
 .visual-mode .canvas-container-wrapper {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
+    position: absolute; inset: 0; width: 100%; height: 100%;
 }
 
-/* ── Floating controls bar (only shown in visual-mode) ── */
 .visual-controls {
-    display: none;          /* hidden by default */
+    display: none;
     position: fixed;
-    bottom: 28px;
-    left: 50%;
+    bottom: 28px; left: 50%;
     transform: translateX(-50%);
     background: rgba(20,20,20,0.92);
     backdrop-filter: blur(8px);
@@ -865,7 +698,7 @@
     border: 1px solid rgba(255,255,255,0.12);
     align-items: center;
 }
-.visual-mode .visual-controls { display: flex; }   /* show only in fullscreen */
+.visual-mode .visual-controls { display: flex; }
 
 .floating-btn {
     background: rgba(255,255,255,0.1);
@@ -886,9 +719,6 @@
 @code {
     [Parameter]
     public Guid? ProjectId { get; set; }
-
-    private bool _imageDetailsOpen = true;
-    private bool _savedDefectsOpen = true;
 
     protected override void OnInitialized()
     {
@@ -915,12 +745,6 @@
         StateHasChanged();
     }
 
-    private void ToggleRightPanel()
-    {
-        State.IsRightPanelCollapsed = !State.IsRightPanelCollapsed;
-        StateHasChanged();
-    }
-
     private void SelectBlade(Blade blade)
     {
         Logger.LogInformation("Blade selected: {BladeSerial}", blade.SerialNumber);
@@ -933,6 +757,11 @@
                 blade.Views.Add(new BladeView { Side = side });
 
         UpdateSelectedViewImages();
+
+        // Auto-select first image if available
+        if (State.SelectedViewImages.Count > 0)
+            SelectImageDirect(State.SelectedViewImages[0]);
+
         StateHasChanged();
     }
 
@@ -949,6 +778,11 @@
         catch { /* canvas may not be ready */ }
 
         UpdateSelectedViewImages();
+
+        // Auto-select first image in the new view if available
+        if (State.SelectedViewImages.Count > 0)
+            SelectImageDirect(State.SelectedViewImages[0]);
+
         StateHasChanged();
     }
 
@@ -1038,41 +872,35 @@
     }
 
     [JSInvokable]
-   public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
-{
-    State.CurrentWidthPx = width;
-    State.CurrentHeightPx = height;
-    State.CurrentWidthPct = (width / refWidth) * 100;
-    State.CurrentHeightPct = (height / refHeight) * 100;
-    State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
-
-    // Scale factors: pixels per cm (consistent with polygon method)
-    double scaleX = refWidth / 100.0;
-    double scaleY = refHeight / 100.0;
-
-    // Physical dimensions and area in cm
-    double widthCm = width / scaleX;
-    double heightCm = height / scaleY;
-    double areaCm2 = (width * height) / (scaleX * scaleY);  // Pixel area scaled to cm²
-
-    State.CurrentAnomaly = new Anomaly
+    public void ReceiveSelection(double x, double y, double width, double height, double refWidth, double refHeight)
     {
-        AnomalyId = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
-        RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
-        BladeSide = State.SelectedView ?? "PS",
-        WidthCm = widthCm,
-        HeightCm = heightCm,
-        AreaCm2 = areaCm2,  // Now correctly set to cm²
-        Type = "Other",
-        Classification = null,
-        Coordinates = new ImageCoordinates
+        State.CurrentWidthPx = width;
+        State.CurrentHeightPx = height;
+        State.CurrentWidthPct = (width / refWidth) * 100;
+        State.CurrentHeightPct = (height / refHeight) * 100;
+        State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+
+        double scaleX = refWidth / 100.0;
+        double scaleY = refHeight / 100.0;
+
+        State.CurrentAnomaly = new Anomaly
         {
-            X = x, Y = y, Width = width, Height = height,
-            ReferenceWidth = refWidth, ReferenceHeight = refHeight
-        }
-    };
-    StateHasChanged();
-}
+            AnomalyId    = $"NEW#{DateTime.Now.Ticks % 10000:X4}",
+            RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
+            BladeSide    = State.SelectedView ?? "PS",
+            WidthCm      = width  / scaleX,
+            HeightCm     = height / scaleY,
+            AreaCm2      = (width * height) / (scaleX * scaleY),
+            Type         = "Other",
+            Classification = null,
+            Coordinates  = new ImageCoordinates
+            {
+                X = x, Y = y, Width = width, Height = height,
+                ReferenceWidth = refWidth, ReferenceHeight = refHeight
+            }
+        };
+        StateHasChanged();
+    }
 
     [JSInvokable]
     public void ReceiveZoomChange(double newZoom)
@@ -1119,65 +947,52 @@
     }
 
     [JSInvokable]
-   public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area,
-    double boundingWidth, double boundingHeight, double refWidth, double refHeight)
-{
-    if (xCoords.Length != 4 || yCoords.Length != 4)
+    public void ReceivePolygonSelection(double[] xCoords, double[] yCoords, double area,
+        double boundingWidth, double boundingHeight, double refWidth, double refHeight)
     {
-        Logger.LogWarning("Invalid polygon selection: expected 4 points");
-        return;
-    }
-
-    var rectPoints = ConvertToRectangle(xCoords, yCoords);
-    var dims = CalculateRectangleDimensions(rectPoints);
-    var polygonPoints = new List<double>();
-    for (int i = 0; i < 4; i++) 
-    { 
-        polygonPoints.Add(rectPoints[i].x); 
-        polygonPoints.Add(rectPoints[i].y); 
-    }
-
-    // Scale factors: pixels per cm
-    double scaleX = refWidth / 100.0;   // since 100% = refWidth pixels
-    double scaleY = refHeight / 100.0;
-
-    // Physical dimensions in cm (using bounding box)
-    double widthCm = dims.width / scaleX;
-    double heightCm = dims.height / scaleY;
-    
-    // Physical area in cm² (preferred: use passed area, scaled)
-    double areaCm2 = area / (scaleX * scaleY);
-
-    State.CurrentWidthPx = dims.width;
-    State.CurrentHeightPx = dims.height;
-    State.CurrentWidthPct = (dims.width / refWidth) * 100;
-    State.CurrentHeightPct = (dims.height / refHeight) * 100;
-    State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
-
-    State.CurrentAnomaly = new Anomaly
-    {
-        AnomalyId = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
-        RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
-        BladeSide = State.SelectedView ?? "PS",
-        WidthCm = widthCm,
-        HeightCm = heightCm,
-        AreaCm2 = areaCm2,  // Now correctly scaled to cm²
-        Type = "Other",
-        Classification = null,
-        Coordinates = new ImageCoordinates
+        if (xCoords.Length != 4 || yCoords.Length != 4)
         {
-            PolygonPoints = polygonPoints,
-            ReferenceWidth = refWidth,
-            ReferenceHeight = refHeight,
-            X = rectPoints.Min(p => p.x),
-            Y = rectPoints.Min(p => p.y),
-            Width = dims.width,
-            Height = dims.height,
+            Logger.LogWarning("Invalid polygon selection: expected 4 points");
+            return;
         }
-    };
-    StateHasChanged();
-}
 
+        var rectPoints   = ConvertToRectangle(xCoords, yCoords);
+        var dims         = CalculateRectangleDimensions(rectPoints);
+        var polygonPoints = new List<double>();
+        for (int i = 0; i < 4; i++) { polygonPoints.Add(rectPoints[i].x); polygonPoints.Add(rectPoints[i].y); }
+
+        double scaleX = refWidth  / 100.0;
+        double scaleY = refHeight / 100.0;
+
+        State.CurrentWidthPx  = dims.width;
+        State.CurrentHeightPx = dims.height;
+        State.CurrentWidthPct  = (dims.width  / refWidth)  * 100;
+        State.CurrentHeightPct = (dims.height / refHeight) * 100;
+        State.CurrentCanvasBoxIndex = State.SelectedImage?.Anomalies.Count ?? 0;
+
+        State.CurrentAnomaly = new Anomaly
+        {
+            AnomalyId    = $"RECT#{DateTime.Now.Ticks % 10000:X4}",
+            RadiusMeters = State.SelectedImage?.PositionMeters ?? 0,
+            BladeSide    = State.SelectedView ?? "PS",
+            WidthCm      = dims.width  / scaleX,
+            HeightCm     = dims.height / scaleY,
+            AreaCm2      = area / (scaleX * scaleY),
+            Type         = "Other",
+            Classification = null,
+            Coordinates  = new ImageCoordinates
+            {
+                PolygonPoints  = polygonPoints,
+                ReferenceWidth = refWidth,
+                ReferenceHeight = refHeight,
+                X      = rectPoints.Min(p => p.x),
+                Y      = rectPoints.Min(p => p.y),
+                Width  = dims.width,
+                Height = dims.height,
+            }
+        };
+        StateHasChanged();
+    }
 
     private (double x, double y)[] ConvertToRectangle(double[] xCoords, double[] yCoords)
     {
@@ -1342,31 +1157,6 @@
         finally { _isGeneratingReport = false; StateHasChanged(); }
     }
 
-    private async Task HandleBulkFileUpload(InputFileChangeEventArgs e)
-    {
-        if (State.SelectedBlade == null || string.IsNullOrEmpty(State.SelectedView)) return;
-        try
-        {
-            var view = State.SelectedBlade.Views.FirstOrDefault(v => v.Side == State.SelectedView)
-                    ?? new BladeView { Side = State.SelectedView };
-            if (!State.SelectedBlade.Views.Contains(view))
-                State.SelectedBlade.Views.Add(view);
-
-            foreach (var file in e.GetMultipleFiles(50))
-            {
-                using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
-                var url = await FileStorageService.SaveFileAsync(stream, file.Name);
-                view.Images.Add(new InspectionImage { ImageUrl = url, SequenceOrder = view.Images.Count });
-            }
-
-            UpdateSelectedViewImages();
-            if (State.SelectedViewImages.Count > 0)
-                SelectImageDirect(State.SelectedViewImages.First());
-            StateHasChanged();
-        }
-        catch (Exception ex) { Logger.LogError(ex, "File upload failed for view {View}", State.SelectedView); throw; }
-    }
-
     private void DeleteImage(InspectionImage img)
     {
         if (State.SelectedBlade == null) return;
@@ -1427,7 +1217,6 @@
     private async Task ToggleVisualMode()
     {
         State.IsVisualMode = !State.IsVisualMode;
-        // Give the DOM a frame to apply the new CSS before asking JS to re-fit
         await Task.Delay(80);
         if (State.IsCanvasInitialized)
             await JSRuntime.InvokeVoidAsync("inspectionCanvas.resetView");

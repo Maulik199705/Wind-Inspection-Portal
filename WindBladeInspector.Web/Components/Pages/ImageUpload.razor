@@ -1,0 +1,525 @@
+﻿@page "/upload/{ProjectId:guid}"
+@using WindBladeInspector.Core.Services
+@using WindBladeInspector.Core.Entities
+@using WindBladeInspector.Core.Interfaces
+@inject DashboardService DashboardService
+@inject IFileStorageService FileStorageService
+@inject NavigationManager Navigation
+@inject ILogger<ImageUpload> Logger
+@rendermode InteractiveServer
+
+<PageTitle>QualiMax – Upload Images</PageTitle>
+
+<div class="upload-page">
+    <header class="upload-header">
+        <div class="upload-title">
+            <svg viewBox="0 0 24 24" fill="currentColor" style="width:28px;height:28px;fill:#0f0;">
+                <path d="M12 2C13.1 2 14 2.9 14 4V9.5C14 10.9 14.8 12.1 16 12.7V4C16 2.9 16.9 2 18 2S20 2.9 20 4V13C20 17.4 16.4 21 12 21S4 17.4 4 13V4C4 2.9 4.9 2 6 2S8 2.9 8 4V12.7C9.2 12.1 10 10.9 10 9.5V4C10 2.9 10.9 2 12 2Z"/>
+            </svg>
+            Upload Blade Images
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn-back" @onclick="GoBack">← Dashboard</button>
+
+            @if (HasAnyImages())
+            {
+                <button class="btn-start active" @onclick="StartInspection">
+                    🔍 Start Inspection →
+                </button>
+            }
+            else
+            {
+                <button class="btn-start" disabled title="Upload at least 1 image to enable inspection">
+                    🔍 Start Inspection →
+                </button>
+            }
+        </div>
+    </header>
+
+    @if (_project == null)
+    {
+        <div class="loading">Loading project…</div>
+    }
+    else
+    {
+        <div class="upload-body">
+            <!-- Project info bar -->
+            <div class="project-info-bar">
+                <span class="turbine-id">@_project.TurbineId</span>
+                @if (!string.IsNullOrWhiteSpace(_project.Model))
+                {
+                    <span class="turbine-model">@_project.Model</span>
+                }
+                <span class="park-name">📍 @_project.ParkName</span>
+                <span class="upload-progress" style="margin-left:auto;">
+                    @{
+                        var totalImages = _project.Blades.Sum(b => b.Views.Sum(v => v.Images.Count));
+                    }
+                    @if (totalImages > 0)
+                    {
+                        <span class="img-count-badge">📷 @totalImages image@(totalImages == 1 ? "" : "s") uploaded</span>
+                    }
+                    else
+                    {
+                        <span style="color:#555;font-size:0.8rem;">No images yet — upload to begin inspection</span>
+                    }
+                </span>
+            </div>
+
+            <!-- ── Blade Tabs ── -->
+            <div class="blade-tabs">
+                @foreach (var blade in _project.Blades)
+                {
+                    var bladeImageCount = blade.Views.Sum(v => v.Images.Count);
+                    <button class="blade-tab @(_selectedBlade?.Id == blade.Id ? "active" : "")"
+                            @onclick="() => SelectBlade(blade)">
+                        Blade @blade.SerialNumber
+                        @if (bladeImageCount > 0)
+                        {
+                            <span class="tab-badge">@bladeImageCount</span>
+                        }
+                    </button>
+                }
+            </div>
+
+            @if (_selectedBlade != null)
+            {
+                <!-- ── View Tabs (PS / SS / LE / TE) ── -->
+                <div class="view-tabs">
+                    @foreach (var side in new[] { "PS", "SS", "LE", "TE" })
+                    {
+                        var bladeView  = _selectedBlade.Views.FirstOrDefault(v => v.Side == side);
+                        var imageCount = bladeView?.Images.Count ?? 0;
+                        <button class="view-tab @(_selectedView == side ? "active" : "")"
+                                @onclick="() => SelectView(side)">
+                            <span class="view-label">@GetViewLabel(side)</span>
+                            <span class="view-short">@side</span>
+                            @if (imageCount > 0)
+                            {
+                                <span class="view-count">@imageCount img</span>
+                            }
+                        </button>
+                    }
+                </div>
+
+                <!-- ── Upload Zone ── -->
+                <div class="upload-zone-wrapper">
+                    <div class="upload-zone-header">
+                        <span>📂 @GetViewLabel(_selectedView) — Blade @_selectedBlade.SerialNumber</span>
+                        <span class="zone-hint">Images are added in order (root → tip). Select multiple files at once.</span>
+                    </div>
+
+                    @{
+                        var fileInputId = $"vfi-{_selectedView}";
+                        var currentView = _selectedBlade.Views.FirstOrDefault(v => v.Side == _selectedView);
+                    }
+
+                    <label class="upload-drop-zone" for="@fileInputId">
+                        <svg viewBox="0 0 24 24" fill="currentColor" class="upload-icon">
+                            <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
+                        </svg>
+                        <div class="drop-label">Click or drag images here</div>
+                        <div class="drop-hint">JPG · PNG · WEBP — up to 20 MB each · up to 50 files at once</div>
+                        @if (_uploading)
+                        {
+                            <div class="uploading-spinner">⏳ Uploading, please wait…</div>
+                        }
+                    </label>
+                    <InputFile OnChange="HandleUpload" multiple
+                               style="display:none;" id="@fileInputId"
+                               accept=".jpg,.jpeg,.png,.webp" />
+
+                    <!-- Thumbnails -->
+                    @if (currentView != null && currentView.Images.Count > 0)
+                    {
+                        <div class="thumb-grid">
+                            @foreach (var img in currentView.Images.OrderBy(i => i.SequenceOrder))
+                            {
+                                var capturedImg = img;
+                                <div class="thumb-card">
+                                    <img src="@capturedImg.ImageUrl" alt="Image @(capturedImg.SequenceOrder + 1)" />
+                                    <div class="thumb-footer">
+                                        <span>#@(capturedImg.SequenceOrder + 1)</span>
+                                        <button class="thumb-delete" @onclick="() => DeleteImage(capturedImg)" title="Remove">✕</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (!_uploading)
+                    {
+                        <div class="no-images-hint">No images uploaded for @GetViewLabel(_selectedView) yet.</div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+.upload-page {
+    background: #0f1115;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    color: #e4e6eb;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+.upload-header {
+    background: #1a1d24;
+    border-bottom: 1px solid #2a2f3a;
+    padding: 14px 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.upload-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f0;
+}
+
+.btn-back {
+    background: transparent;
+    border: 1px solid #444;
+    color: #aaa;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+.btn-back:hover { border-color: #aaa; color: #fff; }
+
+/* Inspect button states */
+.btn-start {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid #333;
+    background: transparent;
+    color: #444;
+}
+.btn-start:disabled { cursor: not-allowed; opacity: 0.4; }
+.btn-start.active {
+    background: rgba(0,255,136,0.12);
+    border-color: #00ff88;
+    color: #00ff88;
+    animation: start-pulse 2.5s ease-in-out infinite;
+}
+.btn-start.active:hover {
+    background: #00ff88;
+    color: #000;
+    box-shadow: 0 4px 14px rgba(0,255,136,0.4);
+    animation: none;
+}
+
+@@keyframes start-pulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(0,255,136,0); }
+    50%       { box-shadow: 0 0 12px rgba(0,255,136,0.5); }
+}
+
+.upload-body { padding: 24px 32px; flex: 1; }
+
+.project-info-bar {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 20px;
+    padding: 10px 16px;
+    background: #1a1d24;
+    border-radius: 8px;
+    border: 1px solid #2a2f3a;
+    flex-wrap: wrap;
+}
+
+.turbine-id    { font-size: 1.1rem; font-weight: 700; color: #0f0; }
+.turbine-model { font-size: 0.85rem; color: #888; }
+.park-name     { font-size: 0.85rem; color: #aaa; }
+.upload-progress { display: flex; align-items: center; }
+
+.img-count-badge {
+    background: rgba(0,255,136,0.12);
+    border: 1px solid #00ff88;
+    color: #00ff88;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+/* ── Blade Tabs ── */
+.blade-tabs { display: flex; gap: 8px; margin-bottom: 0; }
+
+.blade-tab {
+    background: #1a1d24;
+    border: 1px solid #2a2f3a;
+    border-bottom: none;
+    color: #aaa;
+    padding: 8px 20px;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.blade-tab:hover  { border-color: #555; color: #fff; }
+.blade-tab.active { background: #0f0; color: #000; border-color: #0f0; }
+
+.tab-badge {
+    background: #000;
+    color: #0f0;
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 700;
+}
+.blade-tab.active .tab-badge { background: rgba(0,0,0,0.25); color: #000; }
+
+/* ── View Tabs ── */
+.view-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+}
+
+.view-tab {
+    background: #1a1d24;
+    border: 1px solid #2a2f3a;
+    color: #aaa;
+    padding: 10px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 120px;
+}
+.view-tab:hover  { border-color: #555; color: #fff; }
+.view-tab.active { background: #0f0; color: #000; border-color: #0f0; font-weight: 700; }
+
+.view-label { font-size: 0.82rem; font-weight: 600; }
+.view-short { font-size: 0.7rem; opacity: 0.7; }
+.view-count {
+    font-size: 0.68rem;
+    background: rgba(0,0,0,0.2);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-top: 2px;
+}
+.view-tab.active .view-count { background: rgba(0,0,0,0.3); color: #000; }
+
+/* ── Upload Zone ── */
+.upload-zone-wrapper {
+    background: #161a22;
+    border: 1px solid #242a35;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.upload-zone-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ccc;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.zone-hint { font-size: 0.75rem; color: #666; font-weight: 400; }
+
+.upload-drop-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 2px dashed #333;
+    border-radius: 10px;
+    padding: 32px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #11141a;
+    margin-bottom: 20px;
+}
+.upload-drop-zone:hover { border-color: #0f0; background: rgba(0,255,0,0.04); }
+
+.upload-icon { width: 40px; height: 40px; fill: #444; }
+.upload-drop-zone:hover .upload-icon { fill: #0f0; }
+
+.drop-label { font-size: 1rem; color: #888; font-weight: 600; }
+.drop-hint  { font-size: 0.75rem; color: #555; }
+.uploading-spinner { color: #0f0; font-size: 0.85rem; margin-top: 4px; }
+
+/* ── Thumbnail Grid ── */
+.thumb-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.thumb-card {
+    background: #11141a;
+    border: 1px solid #242a35;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+.thumb-card:hover { border-color: #555; }
+
+.thumb-card img { width: 100%; height: 88px; object-fit: cover; display: block; }
+
+.thumb-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+    font-size: 0.72rem;
+    color: #888;
+}
+
+.thumb-delete {
+    background: transparent;
+    border: none;
+    color: #ff4444;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0 2px;
+    line-height: 1;
+}
+.thumb-delete:hover { color: #ff8888; }
+
+.no-images-hint {
+    text-align: center;
+    color: #444;
+    font-size: 0.85rem;
+    padding: 16px 0;
+}
+
+.loading { color: #555; padding: 40px; text-align: center; }
+</style>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+
+    private InspectionProject? _project;
+    private Blade? _selectedBlade;
+    private string _selectedView = "PS";
+    private bool _uploading = false;
+
+    protected override void OnInitialized()
+    {
+        _project = DashboardService.GetProjectById(ProjectId);
+        if (_project != null)
+        {
+            foreach (var blade in _project.Blades)
+            {
+                foreach (var side in new[] { "PS", "SS", "LE", "TE" })
+                    if (!blade.Views.Any(v => v.Side == side))
+                        blade.Views.Add(new BladeView { Side = side });
+            }
+            _selectedBlade = _project.Blades.FirstOrDefault();
+        }
+    }
+
+    private void SelectBlade(Blade blade)
+    {
+        _selectedBlade = blade;
+        _selectedView  = "PS";
+    }
+
+    private void SelectView(string side)
+    {
+        _selectedView = side;
+        StateHasChanged();
+    }
+
+    private string GetViewLabel(string side) => side switch
+    {
+        "PS" => "Pressure Side",
+        "SS" => "Suction Side",
+        "LE" => "Leading Edge",
+        "TE" => "Trailing Edge",
+        _    => side
+    };
+
+    private bool HasAnyImages() =>
+        _project?.Blades.Any(b => b.Views.Any(v => v.Images.Count > 0)) == true;
+
+    private async Task HandleUpload(InputFileChangeEventArgs e)
+    {
+        if (_selectedBlade == null || _project == null) return;
+        _uploading = true;
+        StateHasChanged();
+
+        try
+        {
+            var view = _selectedBlade.Views.First(v => v.Side == _selectedView);
+
+            foreach (var file in e.GetMultipleFiles(50))
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+                var url = await FileStorageService.SaveFileAsync(stream, file.Name);
+                view.Images.Add(new InspectionImage
+                {
+                    ImageUrl      = url,
+                    SequenceOrder = view.Images.Count
+                });
+            }
+
+            DashboardService.SaveProject(_project);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Upload failed for blade {Blade} view {View}",
+                _selectedBlade?.SerialNumber, _selectedView);
+        }
+        finally
+        {
+            _uploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void DeleteImage(InspectionImage img)
+    {
+        if (_selectedBlade == null || _project == null) return;
+        var view = _selectedBlade.Views.FirstOrDefault(v => v.Images.Contains(img));
+        if (view == null) return;
+
+        view.Images.Remove(img);
+        for (int i = 0; i < view.Images.Count; i++)
+            view.Images[i].SequenceOrder = i;
+
+        DashboardService.SaveProject(_project);
+        StateHasChanged();
+    }
+
+    private void StartInspection() =>
+        Navigation.NavigateTo($"/inspection/{ProjectId}");
+
+    private void GoBack() =>
+        Navigation.NavigateTo("/");
+}
