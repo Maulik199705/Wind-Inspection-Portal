@@ -1,14 +1,10 @@
 ﻿using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 using SkiaSharp;
+using QuestPDF.Helpers;
 
 namespace WindBladeInspector.Infrastructure.Reports.Components;
 
-/// <summary>
-/// Back cover page composited entirely via SkiaSharp into a single full-bleed image.
-/// Zero overlays — the background photo is fully visible.
-/// Text uses a dark drop-shadow stroke for legibility on any background colour.
-/// </summary>
 internal sealed class BackCoverPageComponent
 {
     private readonly byte[]? _logoBytes;
@@ -16,8 +12,8 @@ internal sealed class BackCoverPageComponent
 
     private const int W = 1190;
     private const int H = 1684;
-
     private const string Teal = "#0AABA0";
+    private const string DarkBlue = "#00008B";  // DARK BLUE (standard dark blue hex)
 
     public BackCoverPageComponent(byte[]? logoBytes, byte[]? backCoverImageBytes)
     {
@@ -26,7 +22,7 @@ internal sealed class BackCoverPageComponent
     }
 
     public void Compose(IContainer container) =>
-        container.Image(BuildCompositeImage(), ImageScaling.FitArea);
+        container.Image(BuildCompositeImage()!);
 
     private byte[] BuildCompositeImage()
     {
@@ -34,7 +30,7 @@ internal sealed class BackCoverPageComponent
         using var surface = SKSurface.Create(info);
         var cv = surface.Canvas;
 
-        // ── 1. Full-bleed background — no overlay whatsoever ─────────────
+        // 1. Background
         if (_backCoverImageBytes != null)
         {
             using var bmp = SKBitmap.Decode(_backCoverImageBytes);
@@ -48,102 +44,24 @@ internal sealed class BackCoverPageComponent
             cv.Clear(SKColor.Parse(Teal));
         }
 
-        int pad = Scale(18);
+        // ── CLEAN LAYOUT ──
 
-        // ── 2. Logo (top-left) ─────────────────────────────────────────────
-        if (_logoBytes is { Length: > 0 })
-        {
-            using var logoBmp = SKBitmap.Decode(_logoBytes);
-            if (logoBmp != null)
-            {
-                int logoSize = Scale(70);
-                cv.DrawBitmap(logoBmp, SKRect.Create(pad, pad, logoSize, logoSize));
-            }
-        }
+        // 1. Top text - BLACK
+        float topTextY = Scale(60);
+        DrawCenteredText(cv, "KEEP YOUR BLADES SAFER WITH...", Scale(20), topTextY, SKColors.Black, false);
 
-        // ── 3. "QUALIMAX SERVICES" (top-right) — white + dark shadow ──────
-        using (var tf = SKTypeface.FromFamilyName("Arial", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright))
-        {
-            float fontSize = Scale(22);
-            using var font = new SKFont(tf, fontSize);
-            float lineH = fontSize * 1.25f;
-            float textY = pad + lineH;
-            float rightX = W - pad;
+        // 2. QUALIMAX - DARK BLUE + Right aligned
+        float qualimaxY = Scale(95);
+        float rightEdge = W - Scale(25);
+        DrawRightAlignedText(cv, "QUALIMAX", Scale(28), qualimaxY, SKColor.Parse(DarkBlue), true, rightEdge);
 
-            // Shadow pass
-            using (var shadowPaint = new SKPaint { Color = new SKColor(0, 0, 0, 120), IsAntialias = true })
-            {
-                DrawRightAligned(cv, font, shadowPaint, "QUALIMAX", rightX + Scale(2), textY + Scale(2));
-                DrawRightAligned(cv, font, shadowPaint, "SERVICES", rightX + Scale(2), textY + lineH + Scale(2));
-            }
-            // White text
-            using (var whitePaint = new SKPaint { Color = SKColors.White, IsAntialias = true })
-            {
-                DrawRightAligned(cv, font, whitePaint, "QUALIMAX", rightX, textY);
-                DrawRightAligned(cv, font, whitePaint, "SERVICES", rightX, textY + lineH);
-            }
-        }
+        // 3. SERVICES - DARK BLUE + Right aligned
+        float servicesY = Scale(130);
+        DrawRightAlignedText(cv, "SERVICES", Scale(28), servicesY, SKColor.Parse(DarkBlue), true, rightEdge);
 
-        // ── 4. Centre branding — no pill, just shadowed white text ────────
-        float cx = W / 2f;
-        float cy = H / 2f;
-
-        using (var tfBold = SKTypeface.FromFamilyName("Arial", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright))
-        using (var tf = SKTypeface.FromFamilyName("Arial", SKFontStyleWeight.Normal, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright))
-        {
-            // ── Tag line ────────────────────────────────────────────────────
-            float tagFs = Scale(12);
-            using var tagFont = new SKFont(tf, tagFs);
-            string tagLine = "KEEP YOUR BLADES SAFER WITH...";
-            float tagW = tagFont.MeasureText(tagLine);
-            float tagX = cx - tagW / 2f;
-            float tagY = cy - Scale(40);
-
-            using (var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 130), IsAntialias = true })
-                cv.DrawText(tagLine, tagX + Scale(1), tagY + Scale(1), tagFont, shadow);
-            using (var white = new SKPaint { Color = SKColors.White, IsAntialias = true })
-                cv.DrawText(tagLine, tagX, tagY, tagFont, white);
-
-            // ── Brand name ──────────────────────────────────────────────────
-            float brandFs = Scale(30);
-            using var brandFont = new SKFont(tfBold, brandFs);
-            string brand = "QUALIMAX SERVICES";
-            float brandW = brandFont.MeasureText(brand);
-            float brandX = cx - brandW / 2f;
-            float brandY = cy + Scale(10);
-
-            using (var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 130), IsAntialias = true })
-                cv.DrawText(brand, brandX + Scale(2), brandY + Scale(2), brandFont, shadow);
-            using (var white = new SKPaint { Color = SKColors.White, IsAntialias = true })
-                cv.DrawText(brand, brandX, brandY, brandFont, white);
-
-            // ── Teal divider line ───────────────────────────────────────────
-            float divY = brandY + Scale(20);
-            int divHalfW = Scale(120);
-            using var divPaint = new SKPaint
-            {
-                Color = SKColor.Parse(Teal),
-                StrokeWidth = Scale(3),
-                IsAntialias = true
-            };
-            cv.DrawLine(cx - divHalfW, divY, cx + divHalfW, divY, divPaint);
-        }
-
-        // ── 5. Website URL (bottom) — shadowed white, no pill ─────────────
-        using (var tf = SKTypeface.FromFamilyName("Arial", SKFontStyleWeight.Normal, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright))
-        {
-            float fs = Scale(14);
-            using var font = new SKFont(tf, fs);
-            string url = "www.qmservice.in";
-            float urlW = font.MeasureText(url);
-            float urlX = (W - urlW) / 2f;
-            float urlY = H - Scale(60);
-
-            using (var shadow = new SKPaint { Color = new SKColor(0, 0, 0, 130), IsAntialias = true })
-                cv.DrawText(url, urlX + Scale(1), urlY + Scale(1), font, shadow);
-            using (var white = new SKPaint { Color = SKColors.White, IsAntialias = true })
-                cv.DrawText(url, urlX, urlY, font, white);
-        }
+        // 4. URL - Light black + Bottom
+        float urlY = H - Scale(65);
+        DrawCenteredText(cv, "www.qmservice.in", Scale(18), urlY, new SKColor(60, 60, 60), false);
 
         cv.Flush();
         using var snapshot = surface.Snapshot();
@@ -151,12 +69,40 @@ internal sealed class BackCoverPageComponent
         return data.ToArray();
     }
 
+    private static void DrawCenteredText(SKCanvas cv, string text, float fontSize, float y, SKColor color, bool isBold)
+    {
+        using var typeface = SKTypeface.FromFamilyName("Arial");
+        using var font = new SKFont(typeface, fontSize);
+        if (isBold) font.Embolden = true;
+
+        float textW = font.MeasureText(text);
+        float textX = (W - textW) / 2f;
+
+        // Shadow
+        using var shadow = new SKPaint { Color = new SKColor(255, 255, 255, 120), IsAntialias = true };
+        cv.DrawText(text, textX + Scale(1), y + Scale(1), font, shadow);
+
+        using var paint = new SKPaint { Color = color, IsAntialias = true };
+        cv.DrawText(text, textX, y, font, paint);
+    }
+
+    private static void DrawRightAlignedText(SKCanvas cv, string text, float fontSize, float y, SKColor color, bool isBold, float rightEdge)
+    {
+        using var typeface = SKTypeface.FromFamilyName("Arial");
+        using var font = new SKFont(typeface, fontSize);
+        if (isBold) font.Embolden = true;
+
+        float textW = font.MeasureText(text);
+        float textX = rightEdge - textW;
+
+        // Simple shadow
+        using var shadow = new SKPaint { Color = new SKColor(100, 100, 100, 100), IsAntialias = true };
+        cv.DrawText(text, textX + Scale(1), y + Scale(1), font, shadow);
+
+        using var paint = new SKPaint { Color = color, IsAntialias = true };
+        cv.DrawText(text, textX, y, font, paint);
+    }
+
     private static int Scale(int pts) => pts * 2;
     private static float Scale(float pts) => pts * 2f;
-
-    private static void DrawRightAligned(SKCanvas cv, SKFont font, SKPaint paint, string text, float rightX, float y)
-    {
-        float w = font.MeasureText(text);
-        cv.DrawText(text, rightX - w, y, font, paint);
-    }
 }
