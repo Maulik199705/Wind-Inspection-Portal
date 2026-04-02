@@ -17,8 +17,8 @@ internal sealed class GeneralTurbineOverviewComponent
 
     private static string SeverityBackground(int severity) => severity switch
     {
-        1 => "#B7E35D",
-        2 => "#2DCC70",
+        1 => "#2DCC70",  // Green
+        2 => "#B7E35D",  // Green
         3 => "#F2D34F",
         4 => "#F79245",
         5 => "#FF3131",

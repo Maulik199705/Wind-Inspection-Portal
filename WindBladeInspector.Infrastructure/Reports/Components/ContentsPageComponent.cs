@@ -34,62 +34,100 @@ internal sealed class ContentsPageComponent
 
                 // Introduction Section
                 table.Cell().Text("01").FontSize(14).Bold();
-                table.Cell().Hyperlink("IntroSection")
-                    .Text("Introduction").FontSize(14).FontColor("#000000");
+
+                table.Cell()
+                    .Text("Introduction")
+                    .FontSize(14)
+                    .FontColor("#000000");
+
                 table.Cell().AlignRight()
                     .Text(_pageNumbers.GetValueOrDefault("IntroSection", 3).ToString())
-                    .FontSize(14).FontColor("#333333");
+                    .FontSize(14)
+                    .FontColor("#333333");
 
                 int sectionNum = 2;
 
                 foreach (var blade in _project.Blades)
                 {
                     // Blade Section Header
-                    table.Cell().PaddingTop(15).Text(sectionNum.ToString("D2")).FontSize(14).Bold();
-                    table.Cell().PaddingTop(15).Text($"Blade {blade.SerialNumber}")
-                        .FontSize(14).Bold().FontColor("#000000");
-                    table.Cell().PaddingTop(15).Text("");
+                    table.Cell()
+                        .PaddingTop(15)
+                        .Text(sectionNum.ToString("D2"))
+                        .FontSize(14)
+                        .Bold();
+
+                    table.Cell()
+                        .PaddingTop(15)
+                        .Text($"Blade {blade.SerialNumber}")
+                        .FontSize(14)
+                        .Bold()
+                        .FontColor("#000000");
+
+                    table.Cell()
+                        .PaddingTop(15)
+                        .Text("");
 
                     // Blade Overview
-                    table.Cell().PaddingLeft(20).Text("");
-                    table.Cell().PaddingTop(5).PaddingLeft(10)
-                        .Hyperlink($"BladeOverview_{blade.SerialNumber}")
+                    table.Cell()
+                        .PaddingLeft(20)
+                        .Text("");
+
+                    table.Cell()
+                        .PaddingTop(5)
+                        .PaddingLeft(10)
                         .Text($"Blade {blade.SerialNumber} Overview")
-                        .FontSize(12).FontColor("#333333");
-                    table.Cell().PaddingTop(5).AlignRight()
+                        .FontSize(12)
+                        .FontColor("#333333");
+
+                    table.Cell()
+                        .PaddingTop(5)
+                        .AlignRight()
                         .Text(_pageNumbers.GetValueOrDefault($"BladeOverview_{blade.SerialNumber}", 0).ToString())
-                        .FontSize(12).FontColor("#333333");
+                        .FontSize(12)
+                        .FontColor("#333333");
 
                     // Blade Annotation Details
-                    table.Cell().PaddingLeft(20).Text("");
+                    table.Cell()
+                        .PaddingLeft(20)
+                        .Text("");
 
                     if (blade.Anomalies != null && blade.Anomalies.Count > 0)
                     {
-                        table.Cell().PaddingTop(5).PaddingLeft(10)
-                            .Hyperlink($"BladeDetails_{blade.SerialNumber}")
+                        table.Cell()
+                            .PaddingTop(5)
+                            .PaddingLeft(10)
                             .Text($"Blade {blade.SerialNumber} Annotation Details")
-                            .FontSize(12).FontColor("#333333");
-                        table.Cell().PaddingTop(5).AlignRight()
+                            .FontSize(12)
+                            .FontColor("#333333");
+
+                        table.Cell()
+                            .PaddingTop(5)
+                            .AlignRight()
                             .Text(_pageNumbers.GetValueOrDefault($"BladeDetails_{blade.SerialNumber}", 0).ToString())
-                            .FontSize(12).FontColor("#333333");
+                            .FontSize(12)
+                            .FontColor("#333333");
                     }
                     else
                     {
-                        table.Cell().PaddingTop(5).PaddingLeft(10)
+                        table.Cell()
+                            .PaddingTop(5)
+                            .PaddingLeft(10)
                             .Text($"Blade {blade.SerialNumber} Annotation Details")
-                            .FontSize(12).FontColor("#999999").Italic();
-                        table.Cell().PaddingTop(5).AlignRight()
+                            .FontSize(12)
+                            .FontColor("#999999")
+                            .Italic();
+
+                        table.Cell()
+                            .PaddingTop(5)
+                            .AlignRight()
                             .Text("-")
-                            .FontSize(12).FontColor("#999999");
+                            .FontSize(12)
+                            .FontColor("#999999");
                     }
 
                     sectionNum++;
                 }
             });
-
-            col.Item().PaddingTop(20)
-                .Text("Click on any section title to navigate directly to that page.")
-                .FontSize(9).FontColor("#666666").Italic();
         });
     }
 }

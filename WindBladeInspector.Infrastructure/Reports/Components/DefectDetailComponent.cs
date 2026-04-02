@@ -22,6 +22,29 @@ internal sealed class DefectDetailComponent
         _imageBytes = imageBytes;
     }
 
+    // Severity color mapping (same as your image 2 example)
+    private static string SeverityColor(int severity) => severity switch
+    {
+
+        1 => "#2DCC70",  // Green
+        2 => "#B7E35D",  // Green
+
+        3 => "#F2D34F",  // Yellow
+        4 => "#F79245",  // Orange
+        5 => "#FF3131",  // Red
+        _ => Colors.White.ToString()
+    };
+
+    private static string SeverityTextColor(int severity) => severity switch
+    {
+        1 => "#000000",
+        2 => "#000000",
+        3 => "#000000",
+        4 => "#000000",
+        5 => "#FFFFFF",
+        _ => "#000000"
+    };
+
     public void Compose(IContainer container)
     {
         _defect.Anomaly?.UpdatePhysicalDimensionsFromCoordinates();
@@ -56,7 +79,7 @@ internal sealed class DefectDetailComponent
                 }
             });
 
-            // ── CENTERED TABLE ──
+            // ── FIRST TABLE: DEFECT DETAILS ──
             col.Item().AlignCenter().Table(table =>
             {
                 table.ColumnsDefinition(cols =>
@@ -65,30 +88,33 @@ internal sealed class DefectDetailComponent
                     cols.RelativeColumn();
                 });
 
-                void Row(string lbl, string val)
+                void Row(string lbl, string val, bool isSeverityRow = false)
                 {
-                    var isBladeRow = lbl == "Blade";
+                    bool isBladeRow = lbl == "Blade";
+                    string bgColor = isSeverityRow ? SeverityColor(_defect.Anomaly?.Severity ?? 0) :
+                                    (isBladeRow ? "#98B7C8" : Colors.White);
+                    string textColor = isSeverityRow ? SeverityTextColor(_defect.Anomaly?.Severity ?? 0) : "#000000";
 
                     table.Cell()
                         .Border(2)
                         .BorderColor("#000000")
-                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
+                        .Background(bgColor)
                         .Padding(8)
                         .AlignCenter()
                         .Text(lbl)
                         .Bold()
                         .FontSize(10)
-                        .FontColor("#000000");
+                        .FontColor(textColor);
 
                     table.Cell()
                         .Border(2)
                         .BorderColor("#000000")
-                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
+                        .Background(bgColor)
                         .Padding(8)
                         .AlignCenter()
                         .Text(string.IsNullOrWhiteSpace(val) ? "None" : val)
                         .FontSize(10)
-                        .FontColor("#000000");
+                        .FontColor(textColor);
                 }
 
                 Row("Blade", _bladeSerial);
@@ -96,12 +122,13 @@ internal sealed class DefectDetailComponent
                 Row("Material", "Auxiliary Component");
                 Row("Type", _defect.Anomaly.GetDefectTypeDisplay() ?? "Leading Edge Protection");
                 Row("Subtype", _defect.Anomaly.Classification?.GetDefectSubtypeString() ?? "None");
-                Row("Severity", _defect.Anomaly.Severity.ToString());
+                Row("Severity", _defect.Anomaly.Severity.ToString(), true); // ← Severity row highlighted
             });
 
-            // Dimensional Table 
+            // Gap between tables
             col.Item().Height(25);
 
+            // ── SECOND TABLE: DIMENSIONS ──
             col.Item().AlignCenter().Table(table =>
             {
                 table.ColumnsDefinition(cols =>
@@ -110,44 +137,44 @@ internal sealed class DefectDetailComponent
                     cols.RelativeColumn();
                 });
 
-                void Row(string lbl, string val)
+                void Row(string lbl, string val, bool isSeverityRow = false)
                 {
-                    var isBladeRow = lbl == "Blade";
+                    bool isBladeRow = lbl == "Blade";
+                    string bgColor = isSeverityRow ? SeverityColor(_defect.Anomaly?.Severity ?? 0) :
+                                    (isBladeRow ? "#98B7C8" : Colors.White);
+                    string textColor = isSeverityRow ? SeverityTextColor(_defect.Anomaly?.Severity ?? 0) : "#000000";
 
                     table.Cell()
                         .Border(2)
                         .BorderColor("#000000")
-                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
+                        .Background(bgColor)
                         .Padding(8)
                         .AlignCenter()
                         .Text(lbl)
                         .Bold()
                         .FontSize(10)
-                        .FontColor("#000000");
+                        .FontColor(textColor);
 
                     table.Cell()
                         .Border(2)
                         .BorderColor("#000000")
-                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
+                        .Background(bgColor)
                         .Padding(8)
                         .AlignCenter()
                         .Text(string.IsNullOrWhiteSpace(val) ? "None" : val)
                         .FontSize(10)
-                        .FontColor("#000000");
+                        .FontColor(textColor);
                 }
 
                 Row("Blade", _bladeSerial);
-
                 Row("Defect Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
                 Row("Defect Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
                 Row("Defect Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
-
-
             });
         });
     }
 
-    // ── EXIF AUTO-ORIENTATION LOGIC (THE FIX) ──
+    // ── EXIF AUTO-ORIENTATION LOGIC ──
     private static SKBitmap? DecodeAutoOrient(byte[] imageBytes)
     {
         using var stream = new MemoryStream(imageBytes);
@@ -159,9 +186,8 @@ internal sealed class DefectDetailComponent
 
         var origin = codec.EncodedOrigin;
         if (origin == SKEncodedOrigin.TopLeft || origin == SKEncodedOrigin.Default)
-            return bitmap; // Image is already upright
+            return bitmap;
 
-        // Determine if the image needs its X and Y axes flipped
         bool needsSwap = origin == SKEncodedOrigin.LeftTop ||
                          origin == SKEncodedOrigin.RightTop ||
                          origin == SKEncodedOrigin.RightBottom ||
@@ -190,10 +216,9 @@ internal sealed class DefectDetailComponent
         return rotated;
     }
 
-    // ── PRECISION ZOOM MATH (100% UI MATCH) ──
+    // ── CROP AND ANNOTATE ──
     private byte[]? CropAndAnnotate(byte[] imageBytes, Anomaly anomaly)
     {
-        // USE THE EXIF-AWARE DECODER INSTEAD OF RAW DECODE
         using var bitmap = DecodeAutoOrient(imageBytes);
         if (bitmap == null) return null;
 
