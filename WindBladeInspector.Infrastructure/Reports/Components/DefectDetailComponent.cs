@@ -96,10 +96,53 @@ internal sealed class DefectDetailComponent
                 Row("Material", "Auxiliary Component");
                 Row("Type", _defect.Anomaly.GetDefectTypeDisplay() ?? "Leading Edge Protection");
                 Row("Subtype", _defect.Anomaly.Classification?.GetDefectSubtypeString() ?? "None");
-                Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
-                Row("Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
-                Row("Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
                 Row("Severity", _defect.Anomaly.Severity.ToString());
+            });
+
+            // Dimensional Table 
+            col.Item().Height(25);
+
+            col.Item().AlignCenter().Table(table =>
+            {
+                table.ColumnsDefinition(cols =>
+                {
+                    cols.ConstantColumn(160);
+                    cols.RelativeColumn();
+                });
+
+                void Row(string lbl, string val)
+                {
+                    var isBladeRow = lbl == "Blade";
+
+                    table.Cell()
+                        .Border(2)
+                        .BorderColor("#000000")
+                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
+                        .Padding(8)
+                        .AlignCenter()
+                        .Text(lbl)
+                        .Bold()
+                        .FontSize(10)
+                        .FontColor("#000000");
+
+                    table.Cell()
+                        .Border(2)
+                        .BorderColor("#000000")
+                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
+                        .Padding(8)
+                        .AlignCenter()
+                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val)
+                        .FontSize(10)
+                        .FontColor("#000000");
+                }
+
+                Row("Blade", _bladeSerial);
+
+                Row("Defect Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
+                Row("Defect Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
+                Row("Defect Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
+
+
             });
         });
     }
