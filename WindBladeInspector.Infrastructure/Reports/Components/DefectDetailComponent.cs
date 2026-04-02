@@ -1,4 +1,5 @@
 using QuestPDF.Fluent;
+using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using SkiaSharp;
 using System;
@@ -66,16 +67,28 @@ internal sealed class DefectDetailComponent
 
                 void Row(string lbl, string val)
                 {
-                    table.Cell().Border(2)
-                        .BorderColor("#CCCCCC")
+                    var isBladeRow = lbl == "Blade";
+
+                    table.Cell()
+                        .Border(2)
+                        .BorderColor("#000000")
+                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
                         .Padding(8)
                         .AlignCenter()
-                        .Text(lbl).Bold().FontSize(10).FontColor("#000000");
-                    table.Cell().Border(2)
-                        .BorderColor("#CCCCCC")
+                        .Text(lbl)
+                        .Bold()
+                        .FontSize(10)
+                        .FontColor("#000000");
+
+                    table.Cell()
+                        .Border(2)
+                        .BorderColor("#000000")
+                        .Background(isBladeRow ? "#98B7C8" : Colors.White)
                         .Padding(8)
                         .AlignCenter()
-                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val).FontSize(10).FontColor("#000000");
+                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val)
+                        .FontSize(10)
+                        .FontColor("#000000");
                 }
 
                 Row("Blade", _bladeSerial);
