@@ -912,7 +912,7 @@
     [JSInvokable] public void NavigateNext()     => NextImage();
     [JSInvokable] public void NavigatePrevious() => PrevImage();
 
-    [JSInvokable]
+  [JSInvokable]
     public void ReceiveBoxDeleted(int index)
     {
         Logger.LogInformation("Box #{Index} deleted from canvas", index + 1);
@@ -922,6 +922,11 @@
         State.SelectedImage.Anomalies.RemoveAt(index);
         State.SelectedBlade?.Anomalies.Remove(deleted);
         if (State.SelectedAnomaly == deleted) State.SelectedAnomaly = null;
+
+        // Persist so dashboard defect count stays in sync
+        if (State.Project != null)
+            DashboardService.SaveProject(State.Project);
+
         StateHasChanged();
     }
 
@@ -1098,7 +1103,6 @@
         if (State.SelectedImage == null || !State.IsCanvasInitialized) return;
         try
         {
-            await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
             if (!State.SelectedImage.Anomalies.Any()) return;
 
             var boxes = State.SelectedImage.Anomalies
@@ -1204,13 +1208,31 @@
 
     private void DeleteCurrentImage() { if (State.SelectedImage != null) DeleteImage(State.SelectedImage); }
 
-    private async Task DeleteAnomaly()
+       private async Task DeleteAnomaly()
     {
         if (State.SelectedAnomaly == null) return;
+
+        // Remove from blade-level and image-level anomaly lists
         State.SelectedBlade?.Anomalies.Remove(State.SelectedAnomaly);
         State.SelectedImage?.Anomalies.Remove(State.SelectedAnomaly);
-        try { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox"); } catch { }
+
+        // Persist so the dashboard defect count reflects the deletion immediately
+        if (State.Project != null)
+            DashboardService.SaveProject(State.Project);
+
         State.SelectedAnomaly = null;
+
+        // Rebuild canvas to remove the deleted box and renumber remaining ones
+        try
+        {
+            if (State.IsCanvasInitialized)
+            {
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
+                await LoadExistingDefectsOnCanvas();
+            }
+        }
+        catch (Exception ex) { Logger.LogError(ex, "Error refreshing canvas after delete"); }
+
         StateHasChanged();
     }
 
