@@ -1,5 +1,4 @@
 using QuestPDF.Fluent;
-using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using SkiaSharp;
 using System;
@@ -21,29 +20,6 @@ internal sealed class DefectDetailComponent
         _defect = defect;
         _imageBytes = imageBytes;
     }
-
-    // Severity color mapping (same as your image 2 example)
-    private static string SeverityColor(int severity) => severity switch
-    {
-
-        1 => "#2DCC70",  // Green
-        2 => "#B7E35D",  // Green
-
-        3 => "#F2D34F",  // Yellow
-        4 => "#F79245",  // Orange
-        5 => "#FF3131",  // Red
-        _ => Colors.White.ToString()
-    };
-
-    private static string SeverityTextColor(int severity) => severity switch
-    {
-        1 => "#000000",
-        2 => "#000000",
-        3 => "#000000",
-        4 => "#000000",
-        5 => "#FFFFFF",
-        _ => "#000000"
-    };
 
     public void Compose(IContainer container)
     {
@@ -79,7 +55,7 @@ internal sealed class DefectDetailComponent
                 }
             });
 
-            // ── FIRST TABLE: DEFECT DETAILS ──
+            // ── CENTERED TABLE ──
             col.Item().AlignCenter().Table(table =>
             {
                 table.ColumnsDefinition(cols =>
@@ -88,33 +64,18 @@ internal sealed class DefectDetailComponent
                     cols.RelativeColumn();
                 });
 
-                void Row(string lbl, string val, bool isSeverityRow = false)
+                void Row(string lbl, string val)
                 {
-                    bool isBladeRow = lbl == "Blade";
-                    string bgColor = isSeverityRow ? SeverityColor(_defect.Anomaly?.Severity ?? 0) :
-                                    (isBladeRow ? "#98B7C8" : Colors.White);
-                    string textColor = isSeverityRow ? SeverityTextColor(_defect.Anomaly?.Severity ?? 0) : "#000000";
-
-                    table.Cell()
-                        .Border(2)
-                        .BorderColor("#000000")
-                        .Background(bgColor)
+                    table.Cell().Border(2)
+                        .BorderColor("#CCCCCC")
                         .Padding(8)
                         .AlignCenter()
-                        .Text(lbl)
-                        .Bold()
-                        .FontSize(10)
-                        .FontColor(textColor);
-
-                    table.Cell()
-                        .Border(2)
-                        .BorderColor("#000000")
-                        .Background(bgColor)
+                        .Text(lbl).Bold().FontSize(10).FontColor("#000000");
+                    table.Cell().Border(2)
+                        .BorderColor("#CCCCCC")
                         .Padding(8)
                         .AlignCenter()
-                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val)
-                        .FontSize(10)
-                        .FontColor(textColor);
+                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val).FontSize(10).FontColor("#000000");
                 }
 
                 Row("Blade", _bladeSerial);
@@ -122,54 +83,10 @@ internal sealed class DefectDetailComponent
                 Row("Material", "Auxiliary Component");
                 Row("Type", _defect.Anomaly.GetDefectTypeDisplay() ?? "Leading Edge Protection");
                 Row("Subtype", _defect.Anomaly.Classification?.GetDefectSubtypeString() ?? "None");
-                Row("Severity", _defect.Anomaly.Severity.ToString(), true); // ← Severity row highlighted
-            });
-
-            // Gap between tables
-            col.Item().Height(25);
-
-            // ── SECOND TABLE: DIMENSIONS ──
-            col.Item().AlignCenter().Table(table =>
-            {
-                table.ColumnsDefinition(cols =>
-                {
-                    cols.ConstantColumn(160);
-                    cols.RelativeColumn();
-                });
-
-                void Row(string lbl, string val, bool isSeverityRow = false)
-                {
-                    bool isBladeRow = lbl == "Blade";
-                    string bgColor = isSeverityRow ? SeverityColor(_defect.Anomaly?.Severity ?? 0) :
-                                    (isBladeRow ? "#98B7C8" : Colors.White);
-                    string textColor = isSeverityRow ? SeverityTextColor(_defect.Anomaly?.Severity ?? 0) : "#000000";
-
-                    table.Cell()
-                        .Border(2)
-                        .BorderColor("#000000")
-                        .Background(bgColor)
-                        .Padding(8)
-                        .AlignCenter()
-                        .Text(lbl)
-                        .Bold()
-                        .FontSize(10)
-                        .FontColor(textColor);
-
-                    table.Cell()
-                        .Border(2)
-                        .BorderColor("#000000")
-                        .Background(bgColor)
-                        .Padding(8)
-                        .AlignCenter()
-                        .Text(string.IsNullOrWhiteSpace(val) ? "None" : val)
-                        .FontSize(10)
-                        .FontColor(textColor);
-                }
-
-                Row("Blade", _bladeSerial);
-                Row("Defect Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
-                Row("Defect Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
-                Row("Defect Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
+                Row("Height (cm)", _defect.Anomaly.HeightCm > 0 ? _defect.Anomaly.HeightCm.ToString("F2") : "—");
+                Row("Width (cm)", _defect.Anomaly.WidthCm > 0 ? _defect.Anomaly.WidthCm.ToString("F2") : "—");
+                Row("Area (cm²)", _defect.Anomaly.AreaCm2 > 0 ? _defect.Anomaly.AreaCm2.ToString("F2") : "—");
+                Row("Severity", _defect.Anomaly.Severity.ToString());
             });
         });
     }
@@ -216,7 +133,7 @@ internal sealed class DefectDetailComponent
         return rotated;
     }
 
-    // ── CROP AND ANNOTATE ──
+    // ── TIGHTLY ZOOMED CROP LOGIC (80-90% DAMAGE FOCUS) ──
     private byte[]? CropAndAnnotate(byte[] imageBytes, Anomaly anomaly)
     {
         using var bitmap = DecodeAutoOrient(imageBytes);
@@ -252,8 +169,11 @@ internal sealed class DefectDetailComponent
         float defWidth = Math.Max(1f, maxX - minX);
         float defHeight = Math.Max(1f, maxY - minY);
 
-        float paddingX = Math.Max(defWidth * 1.5f, 150f);
-        float paddingY = Math.Max(defHeight * 1.5f, 150f);
+        // 🎯 THE FIX: Drastically reduced padding.
+        // Sets padding to just 12% of the defect's size, forcing the damage to take up ~80% of the image.
+        // The '20f' is a small fallback so extremely tiny defects still get a tiny bit of context.
+        float paddingX = Math.Max(defWidth * 0.12f, 20f);
+        float paddingY = Math.Max(defHeight * 0.12f, 20f);
 
         int cropX = (int)Math.Max(0, minX - paddingX);
         int cropY = (int)Math.Max(0, minY - paddingY);
@@ -275,11 +195,12 @@ internal sealed class DefectDetailComponent
         var destRect = SKRect.Create(0, 0, cropW, cropH);
         canvas.DrawBitmap(bitmap, sourceRect, destRect);
 
+        // Tweak stroke thickness so it looks good when tightly zoomed
         using var strokePaint = new SKPaint
         {
             Color = SKColors.Red,
             Style = SKPaintStyle.Stroke,
-            StrokeWidth = Math.Max(3f, cropW / 250f),
+            StrokeWidth = Math.Max(2.5f, cropW / 200f),
             IsAntialias = true,
             StrokeJoin = SKStrokeJoin.Miter
         };
