@@ -1100,30 +1100,36 @@
 
     private async Task LoadExistingDefectsOnCanvas()
     {
+        // Ensure we have an image and a canvas
         if (State.SelectedImage == null || !State.IsCanvasInitialized) return;
+
         try
         {
-            if (!State.SelectedImage.Anomalies.Any()) return;
+            // 1. Clear the canvas completely so old boxes from other images don't persist
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll");
 
-            var boxes = State.SelectedImage.Anomalies
-                .Where(a => a.Coordinates != null)
-                .Select(a => new
-                {
-                    points = a.Coordinates.IsPolygon
-                        ? ConvertPolygonPointsToJsFormat(a.Coordinates.PolygonPoints)
-                        : ConvertRectToPolygonPoints(a.Coordinates),
-                    id     = a.Id.GetHashCode(),
-                    area   = a.Coordinates.GetAreaInPixels(),
-                    bounds = new { a.Coordinates.X, a.Coordinates.Y, a.Coordinates.Width, a.Coordinates.Height }
-                }).ToList();
+            // 2. ONLY load defects that are strictly linked to this specific Image ID
+            var defectsForThisImage = State.SelectedImage.Anomalies
+                .Where(a => a.Coordinates != null) // Keep your existing filters
+                .ToList();
 
-            if (boxes.Any())
+            if (!defectsForThisImage.Any()) return;
+
+            // 3. Map the filtered list to the JS format
+            var boxes = defectsForThisImage.Select(a => new
             {
-                await JSRuntime.InvokeVoidAsync("inspectionCanvas.loadAnomalies", boxes);
-                Logger.LogInformation("Loaded {Count} defects for image {Id}", boxes.Count, State.SelectedImage.Id);
-            }
+                points = a.Coordinates.IsPolygon
+                    ? ConvertPolygonPointsToJsFormat(a.Coordinates.PolygonPoints)
+                    : ConvertRectToPolygonPoints(a.Coordinates),
+                id = a.AnomalyId.GetHashCode(), // Ensure AnomalyId is used
+                area = a.Coordinates.GetAreaInPixels(),
+                bounds = new { a.Coordinates.X, a.Coordinates.Y, a.Coordinates.Width, a.Coordinates.Height }
+            }).ToList();
+
+            await JSRuntime.InvokeVoidAsync("inspectionCanvas.loadAnomalies", boxes);
+            Logger.LogInformation("Loaded {Count} defects for image {Id}", boxes.Count, State.SelectedImage.Id);
         }
-        catch (Exception ex) { Logger.LogError(ex, "Failed to load defects on canvas"); }
+        catch (Exception ex) { Logger.LogError(ex, "Error refreshing canvas"); }
     }
 
     private object[] ConvertPolygonPointsToJsFormat(List<double> pts)
