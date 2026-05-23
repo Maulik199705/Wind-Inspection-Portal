@@ -11,6 +11,7 @@ public class InspectionState
     public Anomaly? SelectedAnomaly { get; set; }
 
     public string SelectedView { get; set; } = "PS";
+    public bool IsDrawingMode { get; set; } = false;
     public List<InspectionImage> SelectedViewImages { get; set; } = new();
 
     public bool IsVisualMode { get; set; }

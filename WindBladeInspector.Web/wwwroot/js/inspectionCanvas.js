@@ -204,7 +204,7 @@ window.inspectionCanvas = (function () {
             return;
         }
 
-        if (mode === 'inspect' && e.button === 0) {
+        if (mode === 'draw' && e.button === 0) {
             // Click on existing box → select it
             if (!drawingPolygon && polygonPoints.length === 0) {
                 const hit = findBoxAtPoint(pos);
