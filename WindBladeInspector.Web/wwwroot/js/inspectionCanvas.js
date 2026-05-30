@@ -457,7 +457,7 @@ window.inspectionCanvas = (function () {
             const isHovered = idx === hoveredBoxIndex;
             const stroke = isSel ? '#ffff00' : isHovered ? '#ff8800' : '#ff3333';
             const fill = isSel ? 'rgba(255,255,0,0.2)' : isHovered ? 'rgba(255,136,0,0.15)' : 'rgba(255,51,51,0.15)';
-            const lw = isSel ? 4 : isHovered ? 3.5 : 2.5;
+            const lw = isSel ? 1.5 : isHovered ? 1.75 : 0.75;
 
             drawPolygon(box.points, stroke, fill, lw);
 
