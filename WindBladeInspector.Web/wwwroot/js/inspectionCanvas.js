@@ -206,14 +206,20 @@ window.inspectionCanvas = (function () {
 
         if (mode === 'draw' && e.button === 0) {
             // Click on existing box → select it
-            if (!drawingPolygon && polygonPoints.length === 0) {
-                const hit = findBoxAtPoint(pos);
-                if (hit !== -1) {
-                    selectedBoxIndex = hit;
-                    redraw();
-                    return;
+            const hit = findBoxAtPoint(pos);
+            if (hit !== -1) {
+                selectedBoxIndex = hit;
+                redraw();
+                // Tell Blazor to open this defect in the left panel
+                if (dotNetRef) {
+                    dotNetRef.invokeMethodAsync('ReceiveBoxSelected', hit).catch(err => console.error(err));
                 }
-                selectedBoxIndex = -1;
+                return; 
+            }
+            selectedBoxIndex = -1;
+            // Tell Blazor to close the defect panel if empty space is clicked
+            if (dotNetRef) {
+                dotNetRef.invokeMethodAsync('ReceiveBoxDeselected').catch(err => console.error(err));
             }
 
             // 4-point polygon drawing

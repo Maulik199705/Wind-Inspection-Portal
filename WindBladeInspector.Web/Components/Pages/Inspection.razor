@@ -193,7 +193,7 @@
                                     <option value="TE">Trailing Edge</option>
                                 </select>
                             </div>
-                            <button class="btn btn-primary btn-block" @onclick="SaveAnomaly">Update Defect</button>
+                            <button class="btn btn-primary btn-block" @onclick="UpdateAnomaly">Update Defect</button>
                             <button class="btn btn-block" @onclick="DeleteAnomaly"
                                     style="margin-top: 5px; background: #442222; border-color: #663333; color: #ff9999;">
                                 Delete Defect
@@ -217,13 +217,42 @@
                             {
                                 foreach (var anomaly in filtered)
                                 {
-                                    <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
+                                    // 1. Calculate the Box Number dynamically to match the canvas
+                                    string boxLabel = "";
+                                    string imgLabel = "";
+                                    bool isCurrentImg = anomaly.ImageId == State.SelectedImage?.Id;
+
+                                    var parentImg = State.SelectedViewImages.FirstOrDefault(i => i.Id == anomaly.ImageId);
+                                    if (parentImg != null)
+                                    {
+                                        imgLabel = $"Img {parentImg.SequenceOrder + 1}";
+
+                                        // Find the index of this defect in the image's coordinate list (this matches the JS Canvas number)
+                                        var coordsList = parentImg.Anomalies.Where(a => a.Coordinates != null).ToList();
+                                        int boxIndex = coordsList.IndexOf(anomaly);
+                                        if (boxIndex >= 0)
+                                        {
+                                            boxLabel = $"[Box {boxIndex + 1}] ";
+                                        }
+                                    }
+
+                                    // 2. Render the item (Dimming items that belong to a different image)
+                                    <div class="anomaly-list-item @(State.SelectedAnomaly?.AnomalyId == anomaly.AnomalyId ? "selected" : "")"
                                          @onclick="() => SelectAnomaly(anomaly)"
-                                         title="@anomaly.GetDefectTypeDisplay()">
+                                         title="@anomaly.GetDefectTypeDisplay()"
+                                         style="@(isCurrentImg ? "" : "opacity: 0.5;")">
                                         <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
                                         <div class="anomaly-list-info">
-                                            <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
-                                            <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
+                                            <div class="anomaly-list-type">
+                                                <strong style="color: #0f0; margin-right: 4px;">@boxLabel</strong>@GetShortDefectDisplay(anomaly)
+                                            </div>
+                                            <div class="anomaly-list-location">
+                                                Severity @anomaly.Severity • @imgLabel
+                                                @if (!isCurrentImg)
+                                                {
+                                                    <span style="color: #ffaa00; margin-left: 5px;">(Other Image)</span>
+                                                }
+                                            </div>
                                         </div>
                                     </div>
                                 }
@@ -940,18 +969,51 @@
     [JSInvokable] public void NavigateNext()     => NextImage();
     [JSInvokable] public void NavigatePrevious() => PrevImage();
 
-  [JSInvokable]
+    [JSInvokable]
+    public void ReceiveBoxSelected(int index)
+    {
+        if (State.SelectedImage == null || index < 0) return;
+
+        // We must match the exact filtered list that the canvas is using
+        var canvasDefects = State.SelectedImage.Anomalies
+            .Where(a => a.Coordinates != null)
+            .ToList();
+
+        if (index >= canvasDefects.Count) return;
+
+        // Load the exact clicked defect into the left panel
+        State.SelectedAnomaly = canvasDefects[index];
+        State.CurrentAnomaly = null; // Close the "New Defect" form if it's open
+        State.IsLeftPanelCollapsed = false; // Pop open the left panel
+
+        StateHasChanged();
+    }
+    [JSInvokable]
+    public void ReceiveBoxDeselected()
+    {
+        State.SelectedAnomaly = null;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
     public void ReceiveBoxDeleted(int index)
     {
+        if (State.SelectedImage == null || index < 0) return;
+
+        // FIX: Match the exact filtered list that the canvas uses
+        var canvasDefects = State.SelectedImage.Anomalies.Where(a => a.Coordinates != null).ToList();
+        if (index >= canvasDefects.Count) return;
+
+        var deleted = canvasDefects[index];
         Logger.LogInformation("Box #{Index} deleted from canvas", index + 1);
-        if (State.SelectedImage == null || index < 0 || index >= State.SelectedImage.Anomalies.Count) return;
 
-        var deleted = State.SelectedImage.Anomalies[index];
-        State.SelectedImage.Anomalies.RemoveAt(index);
-        State.SelectedBlade?.Anomalies.Remove(deleted);
-        if (State.SelectedAnomaly == deleted) State.SelectedAnomaly = null;
+        // Remove using AnomalyId
+        State.SelectedImage.Anomalies.RemoveAll(a => a.AnomalyId == deleted.AnomalyId);
+        State.SelectedBlade?.Anomalies.RemoveAll(a => a.AnomalyId == deleted.AnomalyId);
 
-        // Persist so dashboard defect count stays in sync
+        if (State.SelectedAnomaly?.AnomalyId == deleted.AnomalyId)
+            State.SelectedAnomaly = null;
+
         if (State.Project != null)
             DashboardService.SaveProject(State.Project);
 
@@ -977,6 +1039,48 @@
 
         State.CurrentAnomaly = null;
         StateHasChanged();
+    }
+
+    private async Task UpdateAnomaly()
+    {
+        if (State.SelectedAnomaly == null) return;
+
+        // 1. Sync the Blade's copy (This updates the Left Menu)
+        if (State.SelectedBlade != null)
+        {
+            var bladeAnomaly = State.SelectedBlade.Anomalies.FirstOrDefault(a => a.AnomalyId == State.SelectedAnomaly.AnomalyId);
+            if (bladeAnomaly != null && !ReferenceEquals(bladeAnomaly, State.SelectedAnomaly))
+            {
+                bladeAnomaly.Severity = State.SelectedAnomaly.Severity;
+                bladeAnomaly.Classification = State.SelectedAnomaly.Classification;
+                bladeAnomaly.Type = State.SelectedAnomaly.Type;
+                bladeAnomaly.BladeSide = State.SelectedAnomaly.BladeSide;
+            }
+        }
+
+        // 2. Sync the Image's copy (This updates the Canvas)
+        if (State.SelectedImage != null)
+        {
+            var imageAnomaly = State.SelectedImage.Anomalies.FirstOrDefault(a => a.AnomalyId == State.SelectedAnomaly.AnomalyId);
+            if (imageAnomaly != null && !ReferenceEquals(imageAnomaly, State.SelectedAnomaly))
+            {
+                imageAnomaly.Severity = State.SelectedAnomaly.Severity;
+                imageAnomaly.Classification = State.SelectedAnomaly.Classification;
+                imageAnomaly.Type = State.SelectedAnomaly.Type;
+                imageAnomaly.BladeSide = State.SelectedAnomaly.BladeSide;
+            }
+        }
+
+        // Persist the changes to the database
+        if (State.Project != null)
+            DashboardService.SaveProject(State.Project);
+
+        // Deselect the anomaly to close the left panel form
+        State.SelectedAnomaly = null;
+        StateHasChanged();
+
+        // Refresh the canvas to update the box colors/labels
+        await LoadExistingDefectsOnCanvas();
     }
 
     [JSInvokable]
@@ -1254,21 +1358,21 @@
 
     private void DeleteCurrentImage() { if (State.SelectedImage != null) DeleteImage(State.SelectedImage); }
 
-       private async Task DeleteAnomaly()
+    private async Task DeleteAnomaly()
     {
         if (State.SelectedAnomaly == null) return;
 
-        // Remove from blade-level and image-level anomaly lists
-        State.SelectedBlade?.Anomalies.Remove(State.SelectedAnomaly);
-        State.SelectedImage?.Anomalies.Remove(State.SelectedAnomaly);
+        // FIX: Remove using AnomalyId because memory references might differ
+        State.SelectedBlade?.Anomalies.RemoveAll(a => a.AnomalyId == State.SelectedAnomaly.AnomalyId);
+        State.SelectedImage?.Anomalies.RemoveAll(a => a.AnomalyId == State.SelectedAnomaly.AnomalyId);
 
-        // Persist so the dashboard defect count reflects the deletion immediately
+        // Persist so the dashboard defect count reflects the deletion
         if (State.Project != null)
             DashboardService.SaveProject(State.Project);
 
         State.SelectedAnomaly = null;
 
-        // Rebuild canvas to remove the deleted box and renumber remaining ones
+        // Rebuild canvas to remove the deleted box
         try
         {
             if (State.IsCanvasInitialized)
