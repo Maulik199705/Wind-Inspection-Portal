@@ -32,9 +32,19 @@
     <header class="app-header">
         <h1>
             <svg class="logo-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2C13.1 2 14 2.9 14 4V9.5C14 10.9 14.8 12.1 16 12.7V4C16 2.9 16.9 2 18 2S20 2.9 20 4V13C20 17.4 16.4 21 12 21S4 17.4 4 13V4C4 2.9 4.9 2 6 2S8 2.9 8 4V12.7C9.2 12.1 10 10.9 10 9.5V4C10 2.9 10.9 2 12 2Z"/>
+                <path d="M12 2C13.1 2 14 2.9 14 4V9.5C14 10.9 14.8 12.1 16 12.7V4C16 2.9 16.9 2 18 2S20 2.9 20 4V13C20 17.4 16.4 21 12 21S4 17.4 4 13V4C4 2.9 4.9 2 6 2S8 2.9 8 4V12.7C9.2 12.1 10 10.9 10 9.5V4C10 2.9 10.9 2 12 2Z" />
             </svg>
-            @(State.Project?.TurbineId ?? "Blade Inspection")
+            @if (State.Project != null)
+            {
+                <span class="header-context">
+                    @(State.Project.Client) <span class="header-sep">•</span> @(State.Project.ParkName) <span class="header-sep">•</span>
+                </span>
+                <span class="header-turbine">WTG: @(State.Project.TurbineId)</span>
+            }
+            else
+            {
+                <span>Blade Inspection</span>
+            }
         </h1>
         <div class="header-nav">
             <span style="color: var(--text-muted); margin-right: 1rem;">@(State.Project?.Model ?? "")</span>
@@ -142,20 +152,6 @@
                     </div>
                 }
 
-                @* <!-- Quick Actions hint -->
-                <div class="nav-section" style="margin-top: 1rem;">
-                    <div class="quick-actions-hint">
-                        <div class="hint-title">🎯 Quick Actions</div>
-                        <div class="hint-body">
-                            <div>• <strong>Click</strong> image to place point</div>
-                            <div>• <strong>4 clicks</strong> = draw defect box</div>
-                            <div>• <strong>Delete/Backspace</strong> = remove selected</div>
-                            <div>• <strong>Right-click</strong> box for options</div>
-                            <div>• <strong>ESC</strong> to cancel / deselect</div>
-                            <div>• <strong>Scroll</strong> to zoom, Alt+drag to pan</div>
-                        </div>
-                    </div>
-                </div> *@
 
                 <!-- Generate Report -->
                 <div class="nav-section" style="margin-top: 0.5rem;">
@@ -370,7 +366,22 @@
     transition: grid-template-columns 0.25s ease;
 }
 .inspection-layout.left-collapsed { grid-template-columns: 36px 1fr; }
+    /* Header text formatting */
+    .header-context {
+        font-weight: 500;
+        color: #aaaaaa;
+    }
 
+    .header-turbine {
+        font-weight: bold;
+        color: #ffffff;
+    }
+
+    .header-sep {
+        color: #555555;
+        margin: 0 6px;
+        font-weight: normal;
+    }
 /* ═══════════════════════════════════════════════════════════════════
    LEFT SIDEBAR
 ═══════════════════════════════════════════════════════════════════ */
