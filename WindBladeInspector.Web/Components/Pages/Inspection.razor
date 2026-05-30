@@ -217,42 +217,13 @@
                             {
                                 foreach (var anomaly in filtered)
                                 {
-                                    // 1. Calculate the Box Number dynamically to match the canvas
-                                    string boxLabel = "";
-                                    string imgLabel = "";
-                                    bool isCurrentImg = anomaly.ImageId == State.SelectedImage?.Id;
-
-                                    var parentImg = State.SelectedViewImages.FirstOrDefault(i => i.Id == anomaly.ImageId);
-                                    if (parentImg != null)
-                                    {
-                                        imgLabel = $"Img {parentImg.SequenceOrder + 1}";
-
-                                        // Find the index of this defect in the image's coordinate list (this matches the JS Canvas number)
-                                        var coordsList = parentImg.Anomalies.Where(a => a.Coordinates != null).ToList();
-                                        int boxIndex = coordsList.IndexOf(anomaly);
-                                        if (boxIndex >= 0)
-                                        {
-                                            boxLabel = $"[Box {boxIndex + 1}] ";
-                                        }
-                                    }
-
-                                    // 2. Render the item (Dimming items that belong to a different image)
-                                    <div class="anomaly-list-item @(State.SelectedAnomaly?.AnomalyId == anomaly.AnomalyId ? "selected" : "")"
+                                    <div class="anomaly-list-item @(State.SelectedAnomaly?.Id == anomaly.Id ? "selected" : "")"
                                          @onclick="() => SelectAnomaly(anomaly)"
-                                         title="@anomaly.GetDefectTypeDisplay()"
-                                         style="@(isCurrentImg ? "" : "opacity: 0.5;")">
+                                         title="@anomaly.GetDefectTypeDisplay()">
                                         <div class="anomaly-severity-dot severity-dot-@anomaly.Severity"></div>
                                         <div class="anomaly-list-info">
-                                            <div class="anomaly-list-type">
-                                                <strong style="color: #0f0; margin-right: 4px;">@boxLabel</strong>@GetShortDefectDisplay(anomaly)
-                                            </div>
-                                            <div class="anomaly-list-location">
-                                                Severity @anomaly.Severity • @imgLabel
-                                                @if (!isCurrentImg)
-                                                {
-                                                    <span style="color: #ffaa00; margin-left: 5px;">(Other Image)</span>
-                                                }
-                                            </div>
+                                            <div class="anomaly-list-type">@GetShortDefectDisplay(anomaly)</div>
+                                            <div class="anomaly-list-location">Severity @anomaly.Severity • @anomaly.BladeSide</div>
                                         </div>
                                     </div>
                                 }
@@ -1258,7 +1229,7 @@
 
             if (!defectsForThisImage.Any()) return;
 
-            // 3. Map to JS format
+            // 3. Map the filtered list to the JS format
             var boxes = defectsForThisImage.Select(a => new
             {
                 points = a.Coordinates.IsPolygon
@@ -1266,7 +1237,12 @@
                     : ConvertRectToPolygonPoints(a.Coordinates),
                 id = a.AnomalyId.GetHashCode(),
                 area = a.Coordinates.GetAreaInPixels(),
-                bounds = new { a.Coordinates.X, a.Coordinates.Y, a.Coordinates.Width, a.Coordinates.Height }
+                bounds = new { a.Coordinates.X, a.Coordinates.Y, a.Coordinates.Width, a.Coordinates.Height },
+
+                // SENDING ALL 3 METRICS TO JS
+                type = GetShortDefectDisplay(a),
+                severity = a.Severity,
+                component = a.BladeSide // Change to a.Classification?.Category if your Component is stored there
             }).ToList();
 
             // 4. Draw only the filtered boxes

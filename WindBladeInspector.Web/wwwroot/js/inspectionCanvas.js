@@ -449,14 +449,15 @@ window.inspectionCanvas = (function () {
         if (!ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // 1. Draw all boxes, highlights, and basic labels first
         anomalyBoxes.forEach((box, idx) => {
             if (!box.points || box.points.length !== 4) return;
 
-            const isSel     = idx === selectedBoxIndex;
+            const isSel = idx === selectedBoxIndex;
             const isHovered = idx === hoveredBoxIndex;
-            const stroke    = isSel ? '#ffff00' : isHovered ? '#ff8800' : '#ff3333';
-            const fill      = isSel ? 'rgba(255,255,0,0.2)' : isHovered ? 'rgba(255,136,0,0.15)' : 'rgba(255,51,51,0.15)';
-            const lw        = isSel ? 4 : isHovered ? 3.5 : 2.5;
+            const stroke = isSel ? '#ffff00' : isHovered ? '#ff8800' : '#ff3333';
+            const fill = isSel ? 'rgba(255,255,0,0.2)' : isHovered ? 'rgba(255,136,0,0.15)' : 'rgba(255,51,51,0.15)';
+            const lw = isSel ? 4 : isHovered ? 3.5 : 2.5;
 
             drawPolygon(box.points, stroke, fill, lw);
 
@@ -467,6 +468,49 @@ window.inspectionCanvas = (function () {
 
             if (isSel || isHovered) drawDeleteButton(box.points[0].x, box.points[0].y, idx);
         });
+
+        // 2.  NEW TOOLTIP LOGIC: Draw on top when hovering
+        if (typeof hoveredBoxIndex !== 'undefined' && hoveredBoxIndex !== -1 && anomalyBoxes[hoveredBoxIndex]) {
+            const box = anomalyBoxes[hoveredBoxIndex];
+
+            // Grab the data sent from C# (Fallback to 'N/A' if missing)
+            const sev = box.severity || 'N/A';
+            const comp = box.component || 'N/A';
+            const type = box.type || 'Unknown';
+
+            const text = `Sev: ${sev} | Comp: ${comp} | Type: ${type}`;
+
+            ctx.save();
+            ctx.font = "14px Inter, sans-serif"; // Matches your existing font
+            const textWidth = ctx.measureText(text).width;
+            const padding = 8;
+            const rectHeight = 26;
+
+            // Position the tooltip slightly above the top-left corner of the box
+            const tooltipX = box.points[0].x;
+            const tooltipY = box.points[0].y - 32;
+
+            // Draw dark background with a green border
+            ctx.fillStyle = "rgba(15, 15, 15, 0.9)";
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 1.5;
+
+            // Draw the background shape (with fallback for older browsers)
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(tooltipX, tooltipY, textWidth + (padding * 2), rectHeight, 4);
+            } else {
+                ctx.rect(tooltipX, tooltipY, textWidth + (padding * 2), rectHeight);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            // Draw the white text inside
+            ctx.fillStyle = "#ffffff";
+            ctx.textBaseline = "middle";
+            ctx.fillText(text, tooltipX + padding, tooltipY + (rectHeight / 2));
+            ctx.restore();
+        }
     }
 
     function drawPolygon(pts, strokeColor, fillColor, lw) {
