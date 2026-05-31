@@ -469,46 +469,78 @@ window.inspectionCanvas = (function () {
             if (isSel || isHovered) drawDeleteButton(box.points[0].x, box.points[0].y, idx);
         });
 
-        // 2.  NEW TOOLTIP LOGIC: Draw on top when hovering
+        // 2. TOOLTIP LOGIC: Draw on top when hovering (Multi-line + Boundary Check)
         if (typeof hoveredBoxIndex !== 'undefined' && hoveredBoxIndex !== -1 && anomalyBoxes[hoveredBoxIndex]) {
             const box = anomalyBoxes[hoveredBoxIndex];
 
-            // Grab the data sent from C# (Fallback to 'N/A' if missing)
             const sev = box.severity || 'N/A';
-            const comp = box.component || 'N/A';
+            const mat = box.material || 'N/A';
             const type = box.type || 'Unknown';
 
-            const text = `Sev: ${sev} | Comp: ${comp} | Type: ${type}`;
+            // Split into an array for vertical stacking
+            const lines = [
+                `Sev: ${sev}`,
+                `Mat: ${mat}`,
+                `Type: ${type}`
+            ];
 
             ctx.save();
-            ctx.font = "14px Inter, sans-serif"; // Matches your existing font
-            const textWidth = ctx.measureText(text).width;
-            const padding = 8;
-            const rectHeight = 26;
+            ctx.font = "14px Inter, sans-serif";
 
-            // Position the tooltip slightly above the top-left corner of the box
-            const tooltipX = box.points[0].x;
-            const tooltipY = box.points[0].y - 32;
+            // Calculate the width based on the longest line of text
+            let maxTextWidth = 0;
+            lines.forEach(line => {
+                const w = ctx.measureText(line).width;
+                if (w > maxTextWidth) maxTextWidth = w;
+            });
+
+            const padding = 8;
+            const lineHeight = 18;
+            const rectWidth = maxTextWidth + (padding * 2);
+            const rectHeight = (lines.length * lineHeight) + padding;
+
+            // Initial Tooltip Position (Above the box)
+            let tooltipX = box.points[0].x;
+            let tooltipY = box.points[0].y - rectHeight - 10;
+
+            // --- EDGE COLLISION AVOIDANCE ---
+            // 1. If it goes off the RIGHT edge, push it left
+            if (tooltipX + rectWidth > canvas.width) {
+                tooltipX = canvas.width - rectWidth - 10;
+            }
+            // 2. If it goes off the LEFT edge, push it right
+            if (tooltipX < 0) {
+                tooltipX = 10;
+            }
+            // 3. If it goes off the TOP edge, flip it to show BELOW the defect box
+            if (tooltipY < 0) {
+                // Find the lowest Y point of the box to place it underneath
+                const lowestY = Math.max(box.points[0].y, box.points[1].y, box.points[2].y, box.points[3].y);
+                tooltipY = lowestY + 10;
+            }
+            // --------------------------------
 
             // Draw dark background with a green border
             ctx.fillStyle = "rgba(15, 15, 15, 0.9)";
             ctx.strokeStyle = "#00ff00";
             ctx.lineWidth = 1.5;
 
-            // Draw the background shape (with fallback for older browsers)
             ctx.beginPath();
             if (ctx.roundRect) {
-                ctx.roundRect(tooltipX, tooltipY, textWidth + (padding * 2), rectHeight, 4);
+                ctx.roundRect(tooltipX, tooltipY, rectWidth, rectHeight, 4);
             } else {
-                ctx.rect(tooltipX, tooltipY, textWidth + (padding * 2), rectHeight);
+                ctx.rect(tooltipX, tooltipY, rectWidth, rectHeight);
             }
             ctx.fill();
             ctx.stroke();
 
-            // Draw the white text inside
+            // Draw the white text inside (looping through the 3 lines)
             ctx.fillStyle = "#ffffff";
-            ctx.textBaseline = "middle";
-            ctx.fillText(text, tooltipX + padding, tooltipY + (rectHeight / 2));
+            ctx.textBaseline = "top"; // Start drawing text from the top down
+            lines.forEach((line, index) => {
+                ctx.fillText(line, tooltipX + padding, tooltipY + padding + (index * lineHeight));
+            });
+
             ctx.restore();
         }
     }

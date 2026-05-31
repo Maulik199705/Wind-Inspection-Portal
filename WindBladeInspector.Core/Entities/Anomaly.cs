@@ -142,6 +142,9 @@ public class Anomaly
     /// <summary>Anomaly ID for display (e.g., "1350A7#6FF").</summary>
     public string AnomalyId { get; set; } = string.Empty;
 
+    /// <summary>The ID of the specific image this defect belongs to.</summary>
+    public Guid ImageId { get; set; }
+
     /// <summary>Severity level (1-5): 1=Cosmetic, 5=Very Serious.</summary>
     public int Severity { get; set; } = 1;
 

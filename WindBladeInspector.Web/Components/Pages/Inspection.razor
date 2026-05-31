@@ -1002,7 +1002,8 @@
         StateHasChanged();
     }
 
-    private void SaveAnomaly()
+    // Changed from "private void" to "private async Task"
+    private async Task SaveAnomaly()
     {
         if (State.CurrentAnomaly == null || State.SelectedBlade == null) return;
 
@@ -1012,7 +1013,10 @@
             return;
         }
 
+        // Link explicitly to the current image
+        State.CurrentAnomaly.ImageId = State.SelectedImage?.Id ?? Guid.Empty;
         State.CurrentAnomaly.BladeSide = State.SelectedView;
+
         State.SelectedBlade.Anomalies.Add(State.CurrentAnomaly);
         State.SelectedImage?.Anomalies.Add(State.CurrentAnomaly);
 
@@ -1020,7 +1024,15 @@
             DashboardService.SaveProject(State.Project);
 
         State.CurrentAnomaly = null;
+        State.IsDrawingMode = false;
         StateHasChanged();
+
+        // 🚀 THE FIX: Tell JavaScript that drawing mode is OFF!
+        try { await JSRuntime.InvokeVoidAsync("inspectionCanvas.setMode", "inspect"); } catch { }
+
+        // Force the canvas to delete the temporary box and load the saved data!
+        try { await JSRuntime.InvokeVoidAsync("inspectionCanvas.clearAll"); } catch { }
+        await LoadExistingDefectsOnCanvas();
     }
 
     private async Task UpdateAnomaly()
@@ -1063,6 +1075,21 @@
 
         // Refresh the canvas to update the box colors/labels
         await LoadExistingDefectsOnCanvas();
+    }
+
+    private string GetMaterialDisplay(Anomaly anomaly)
+    {
+        if (anomaly.Classification == null) return "N/A";
+
+        // If it's a Blade, get the Blade Material (Shell, Web, etc.)
+        if (anomaly.Classification.Category == WindBladeInspector.Core.Enums.ComponentCategory.Blade && anomaly.Classification.BladeMaterial.HasValue)
+            return anomaly.Classification.BladeMaterial.Value.ToString();
+
+        // If it's an Auxiliary component, get the component type
+        if (anomaly.Classification.Category == WindBladeInspector.Core.Enums.ComponentCategory.AuxiliaryComponent && anomaly.Classification.AuxiliaryComponentType.HasValue)
+            return anomaly.Classification.AuxiliaryComponentType.Value.ToString();
+
+        return "N/A";
     }
 
     [JSInvokable]
@@ -1164,16 +1191,23 @@
             if (State.IsCanvasInitialized)
             {
                 await JSRuntime.InvokeVoidAsync("inspectionCanvas.cancelCurrentDrawing");
-                try   { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeBoxByIndex", State.CurrentCanvasBoxIndex); }
+                try { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeBoxByIndex", State.CurrentCanvasBoxIndex); }
                 catch { await JSRuntime.InvokeVoidAsync("inspectionCanvas.removeLastBox"); }
+
+                // Tell the JavaScript canvas to stop drawing and go back to normal
+                await JSRuntime.InvokeVoidAsync("inspectionCanvas.setMode", "inspect");
             }
         }
         catch (Exception ex) { Logger.LogError(ex, "Error cancelling defect"); }
         finally
         {
-            State.CurrentAnomaly        = null;
+            State.CurrentAnomaly = null;
             State.CurrentCanvasBoxIndex = -1;
             State.CurrentWidthPx = State.CurrentHeightPx = State.CurrentWidthPct = State.CurrentHeightPct = 0;
+
+            // 🚀 NEW FIX: Tell C# that the drawing mode is now OFF
+            State.IsDrawingMode = false;
+
             StateHasChanged();
         }
     }
@@ -1253,7 +1287,7 @@
                 // SENDING ALL 3 METRICS TO JS
                 type = GetShortDefectDisplay(a),
                 severity = a.Severity,
-                component = a.BladeSide // Change to a.Classification?.Category if your Component is stored there
+                material = GetMaterialDisplay(a) 
             }).ToList();
 
             // 4. Draw only the filtered boxes

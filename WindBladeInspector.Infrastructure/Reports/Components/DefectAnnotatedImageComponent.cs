@@ -83,13 +83,13 @@ internal sealed class DefectAnnotatedImageComponent
             {
                 Color = boxColor,
                 Style = SKPaintStyle.Stroke,
-                StrokeWidth = Math.Max(2f, bitmap.Width / 300f) // relative to image size
+                StrokeWidth = Math.Max(1f, bitmap.Width / 800f)
             };
             canvas.DrawRect(x, y, w, h, strokePaint);
 
             // ── Label badge (top-left of box) ───────────────────────────────
             var label = $"#{defectNo}";
-            float fontSize = Math.Max(18f, bitmap.Width / 60f);
+            float fontSize = Math.Max(14f, bitmap.Width / 120f);
 
             using var badgePaint = new SKPaint { Color = boxColor, Style = SKPaintStyle.Fill };
             float badgeW = fontSize * 2.2f;
