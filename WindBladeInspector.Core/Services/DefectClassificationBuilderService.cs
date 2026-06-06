@@ -55,7 +55,7 @@ public class DefectClassificationBuilderService
         return new Dictionary<AuxiliaryComponent, string>
         {
             { AuxiliaryComponent.Hub, "Hub" },
-            { AuxiliaryComponent.Cover, "Cover" },
+            { AuxiliaryComponent.Nacelle, "Nacelle" },
             { AuxiliaryComponent.Other, "Other" },
             { AuxiliaryComponent.Nozzle, "Nozzle" },
             { AuxiliaryComponent.VortexGenerators, "Vortex Generators" },
@@ -67,7 +67,7 @@ public class DefectClassificationBuilderService
             { AuxiliaryComponent.GurneyFlaps, "Gurney Flaps" },
             { AuxiliaryComponent.Spoiler, "Spoiler" },
             { AuxiliaryComponent.TipBrakeSystem, "Tip Brake System" },
-            { AuxiliaryComponent.Bolts, "Bolts" }
+            { AuxiliaryComponent.DrainageSystem, "Drainage System" }
         };
     }
     
@@ -107,7 +107,7 @@ public class DefectClassificationBuilderService
             AuxiliaryComponent.Hub => Enum.GetValues<HubDefectType>()
                 .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
             
-            AuxiliaryComponent.Nozzle => Enum.GetValues<NozzleDefectType>()
+            AuxiliaryComponent.Nozzle => Enum.GetValues<NacelleDefectType>()
                 .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
             
             AuxiliaryComponent.VortexGenerators => Enum.GetValues<VortexGeneratorDefectType>()
@@ -136,10 +136,13 @@ public class DefectClassificationBuilderService
             
             AuxiliaryComponent.TipBrakeSystem => Enum.GetValues<TipBrakeSystemDefectType>()
                 .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
-            
-            AuxiliaryComponent.Cover => new Dictionary<int, string> { { 1, "Damaged" } },
+
+            AuxiliaryComponent.DrainageSystem => Enum.GetValues<DrainageSystemDefectType>()
+                            .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
+           
+
+
             AuxiliaryComponent.Other => new Dictionary<int, string> { { 1, "Other" } },
-            AuxiliaryComponent.Bolts => new Dictionary<int, string> { { 1, "Damaged" } },
             
             _ => new Dictionary<int, string>()
         };
@@ -154,13 +157,9 @@ public class DefectClassificationBuilderService
         {
             BladeMaterial.Surface when defectType == (int)SurfaceDefectType.Discoloration =>
                 Enum.GetValues<SurfaceDiscolorationSubtype>()
-                    .Where(e => e != SurfaceDiscolorationSubtype.IceContamination) // Filter if needed
+                    .Where(e => e != SurfaceDiscolorationSubtype.IceCondensation) // Filter if needed
                     .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
-            
-            BladeMaterial.Surface when defectType == (int)SurfaceDefectType.Erosion =>
-                Enum.GetValues<SurfaceErosionSubtype>()
-                    .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
-            
+
             BladeMaterial.TopCoat when defectType == (int)TopCoatDefectType.Crack =>
                 Enum.GetValues<TopCoatCrackSubtype>()
                     .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
@@ -169,8 +168,8 @@ public class DefectClassificationBuilderService
                 Enum.GetValues<TopCoatPinholesSubtype>()
                     .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
             
-            BladeMaterial.Laminate when defectType == (int)LaminateDefectType.Erosion =>
-                Enum.GetValues<LaminateErosionSubtype>()
+            BladeMaterial.Laminate when defectType == (int)LaminateDefectType.Chip =>
+                Enum.GetValues<LaminateChipSubtype>()
                     .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
             
             BladeMaterial.Laminate when defectType == (int)LaminateDefectType.Delamination =>
@@ -184,7 +183,10 @@ public class DefectClassificationBuilderService
             BladeMaterial.Structure when defectType == (int)StructureDefectType.Delamination =>
                 Enum.GetValues<StructureDelaminationSubtype>()
                     .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
-            
+            BladeMaterial.Structure when defectType == (int)StructureDefectType.Hole =>
+                            Enum.GetValues<StructureHoleSubtype>()
+                                .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),
+
             BladeMaterial.Through when defectType == (int)ThroughDefectType.Bondline =>
                 Enum.GetValues<ThroughBondlineSubtype>()
                     .ToDictionary(e => (int)e, e => FormatEnumName(e.ToString())),

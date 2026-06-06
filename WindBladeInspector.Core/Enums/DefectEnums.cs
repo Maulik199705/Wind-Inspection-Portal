@@ -30,7 +30,7 @@ public enum BladeMaterial
 public enum AuxiliaryComponent
 {
     Hub = 1,
-    Cover = 2,
+    Nacelle = 2,
     Other = 3,
     Nozzle = 4,
     VortexGenerators = 5,
@@ -42,7 +42,7 @@ public enum AuxiliaryComponent
     GurneyFlaps = 11,
     Spoiler = 12,
     TipBrakeSystem = 13,
-    Bolts = 14
+    DrainageSystem = 14
 }
 
 /// <summary>
@@ -51,7 +51,7 @@ public enum AuxiliaryComponent
 public enum SurfaceDefectType
 {
     Discoloration = 1,
-    Erosion = 2
+    
 }
 
 /// <summary>
@@ -61,17 +61,18 @@ public enum SurfaceDiscolorationSubtype
 {
     Mechanical = 1,
     Scorch = 2,
-    IceContamination = 3
+    IceCondensation = 3,
+    Dirt = 4
 }
 
 /// <summary>
 /// Surface erosion subtypes.
 /// </summary>
-public enum SurfaceErosionSubtype
-{
-    Chip = 1,
-    Flaking = 2
-}
+//public enum SurfaceErosionSubtype
+//{
+//    Chip = 1,
+//    Flaking = 2
+//}
 
 /// <summary>
 /// Top Coat defect types (Blade > TopCoat).
@@ -81,7 +82,9 @@ public enum TopCoatDefectType
     Crack = 1,
     Scratch = 2,
     Pinholes = 3,
-    Scorch = 4
+    Erosion = 4,
+    Chip = 5,
+    Flaking = 6,
 }
 
 /// <summary>
@@ -115,23 +118,29 @@ public enum LaminateDefectType
 {
     Erosion = 1,
     Scratch = 2,
-    Delamination = 3
+    Delamination = 3,
+    Chip = 4
 }
 
 /// <summary>
 /// Laminate erosion subtypes.
 /// </summary>
-public enum LaminateErosionSubtype
-{
-    Chip = 1,
-    None = 0,
-    Lightning = 2
-}
+//public enum LaminateErosionSubtype
+//{
+//    Chip = 1,
+//    None = 0,
+//    Lightning = 2
+//}
 
 /// <summary>
 /// Laminate delamination subtypes.
 /// </summary>
 public enum LaminateDelaminationSubtype
+{
+    None = 0,
+    Lightning = 1
+}
+public enum LaminateChipSubtype
 {
     None = 0,
     Lightning = 1
@@ -167,11 +176,17 @@ public enum StructureCrackSubtype
 /// </summary>
 public enum StructureDelaminationSubtype
 {
-    Edge = 1,
+    None = 1,
     Lightning = 2,
-    NonLightning = 3
+    Surface = 3
 }
 
+public enum StructureHoleSubtype
+{
+   
+    Lightning = 1,
+    NonLightning = 2
+}
 /// <summary>
 /// Through defect types (Blade > Through).
 /// </summary>
@@ -196,13 +211,14 @@ public enum ThroughBondlineSubtype
 /// </summary>
 public enum HubDefectType
 {
-    Damaged = 1
+    Cover = 1,
+    Other = 2
 }
 
 /// <summary>
 /// Nozzle defect types.
 /// </summary>
-public enum NozzleDefectType
+public enum NacelleDefectType
 {
     Damaged = 1,
     Crack = 2
@@ -231,8 +247,8 @@ public enum SerrationDefectType
 /// </summary>
 public enum RainCollarDefectType
 {
-    Peeling = 1,
-    Damaged = 2
+    DamagedOrMisaligned = 1,
+    Missing = 2
 }
 
 /// <summary>
@@ -241,7 +257,8 @@ public enum RainCollarDefectType
 public enum LeadingEdgeProtectionDefectType
 {
     Damaged = 1,
-    Missing = 2
+    Missing = 2,
+    Peeling = 3
 }
 
 /// <summary>
@@ -249,8 +266,9 @@ public enum LeadingEdgeProtectionDefectType
 /// </summary>
 public enum PitchSystemDefectType
 {
-    Damaged = 1,
-    Other = 2
+    CrackOrDamaged = 1,
+    Other = 2,
+    Bolts = 3
 }
 
 /// <summary>
@@ -286,5 +304,11 @@ public enum SpoilerDefectType
 public enum TipBrakeSystemDefectType
 {
     DamagedOrMisaligned = 1,
-    Crack = 2
+    Crack = 2,
+    Bolts = 3
+}
+public enum DrainageSystemDefectType
+{
+    DamagedOrObstructed = 1
+   
 }
