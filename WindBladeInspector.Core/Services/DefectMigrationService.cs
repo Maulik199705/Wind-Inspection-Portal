@@ -12,12 +12,7 @@ public class DefectMigrationService
     private static readonly Dictionary<string, DefectClassification> LegacyMapping = new(StringComparer.OrdinalIgnoreCase)
     {
         // Legacy "Erosion" ? Blade > Surface > Erosion
-        ["Erosion"] = new DefectClassification
-        {
-            Category = ComponentCategory.Blade,
-            BladeMaterial = BladeMaterial.Surface,
-            DefectType = (int)SurfaceDefectType.Erosion
-        },
+       
         
         // Legacy "Crack" ? Blade > TopCoat > Crack
         ["Crack"] = new DefectClassification
@@ -45,13 +40,7 @@ public class DefectMigrationService
         },
         
         // Legacy "Flaking" ? Blade > Surface > Erosion > Flaking
-        ["Flaking"] = new DefectClassification
-        {
-            Category = ComponentCategory.Blade,
-            BladeMaterial = BladeMaterial.Surface,
-            DefectType = (int)SurfaceDefectType.Erosion,
-            DefectSubtype = (int)SurfaceErosionSubtype.Flaking
-        },
+       
         
         // Legacy "Discoloration" ? Blade > Surface > Discoloration
         ["Discoloration"] = new DefectClassification
@@ -112,17 +101,7 @@ public class DefectMigrationService
             };
         }
         
-        if (legacyType.Contains("erosion", StringComparison.OrdinalIgnoreCase) || 
-            legacyType.Contains("chip", StringComparison.OrdinalIgnoreCase))
-        {
-            return new DefectClassification
-            {
-                Category = ComponentCategory.Blade,
-                BladeMaterial = BladeMaterial.Surface,
-                DefectType = (int)SurfaceDefectType.Erosion
-            };
-        }
-        
+       
         if (legacyType.Contains("delamination", StringComparison.OrdinalIgnoreCase))
         {
             return new DefectClassification

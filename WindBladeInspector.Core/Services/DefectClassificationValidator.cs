@@ -97,13 +97,7 @@ public class DefectClassificationValidator
                     errors.Add($"Invalid DefectSubtype {classification.DefectSubtype.Value} for Surface > Discoloration");
                 }
                 break;
-            case SurfaceDefectType.Erosion:
-                if (classification.DefectSubtype.HasValue && 
-                    !Enum.IsDefined(typeof(SurfaceErosionSubtype), classification.DefectSubtype.Value))
-                {
-                    errors.Add($"Invalid DefectSubtype {classification.DefectSubtype.Value} for Surface > Erosion");
-                }
-                break;
+            
         }
     }
     
@@ -134,12 +128,7 @@ public class DefectClassificationValidator
                 }
                 break;
             case TopCoatDefectType.Scratch:
-            case TopCoatDefectType.Scorch:
-                // No subtypes allowed
-                if (classification.DefectSubtype.HasValue && classification.DefectSubtype.Value != 0)
-                {
-                    errors.Add($"DefectSubtype should be null or 0 for TopCoat > {defectType}");
-                }
+           
                 break;
         }
     }
@@ -156,9 +145,9 @@ public class DefectClassificationValidator
         
         switch (defectType)
         {
-            case LaminateDefectType.Erosion:
+            case LaminateDefectType.Chip:
                 if (classification.DefectSubtype.HasValue && 
-                    !Enum.IsDefined(typeof(LaminateErosionSubtype), classification.DefectSubtype.Value))
+                    !Enum.IsDefined(typeof(LaminateChipSubtype), classification.DefectSubtype.Value))
                 {
                     errors.Add($"Invalid DefectSubtype {classification.DefectSubtype.Value} for Laminate > Erosion");
                 }
@@ -170,13 +159,7 @@ public class DefectClassificationValidator
                     errors.Add($"Invalid DefectSubtype {classification.DefectSubtype.Value} for Laminate > Delamination");
                 }
                 break;
-            case LaminateDefectType.Scratch:
-                // No subtypes allowed
-                if (classification.DefectSubtype.HasValue && classification.DefectSubtype.Value != 0)
-                {
-                    errors.Add($"DefectSubtype should be null or 0 for Laminate > Scratch");
-                }
-                break;
+           
         }
     }
     
@@ -251,7 +234,7 @@ public class DefectClassificationValidator
         var isValid = classification.AuxiliaryComponentType!.Value switch
         {
             AuxiliaryComponent.Hub => Enum.IsDefined(typeof(HubDefectType), classification.DefectType),
-            AuxiliaryComponent.Nozzle => Enum.IsDefined(typeof(NozzleDefectType), classification.DefectType),
+            AuxiliaryComponent.Nozzle => Enum.IsDefined(typeof(NacelleDefectType), classification.DefectType),
             AuxiliaryComponent.VortexGenerators => Enum.IsDefined(typeof(VortexGeneratorDefectType), classification.DefectType),
             AuxiliaryComponent.Serrations => Enum.IsDefined(typeof(SerrationDefectType), classification.DefectType),
             AuxiliaryComponent.RainCollar => Enum.IsDefined(typeof(RainCollarDefectType), classification.DefectType),
@@ -261,7 +244,8 @@ public class DefectClassificationValidator
             AuxiliaryComponent.GurneyFlaps => Enum.IsDefined(typeof(GurneyFlapDefectType), classification.DefectType),
             AuxiliaryComponent.Spoiler => Enum.IsDefined(typeof(SpoilerDefectType), classification.DefectType),
             AuxiliaryComponent.TipBrakeSystem => Enum.IsDefined(typeof(TipBrakeSystemDefectType), classification.DefectType),
-            AuxiliaryComponent.Cover or AuxiliaryComponent.Other or AuxiliaryComponent.Bolts => true, // Generic types
+            AuxiliaryComponent.DrainageSystem => Enum.IsDefined(typeof(DrainageSystemDefectType), classification.DefectType),
+            AuxiliaryComponent.Other  => true, // Generic types
             _ => false
         };
         
@@ -299,7 +283,7 @@ public class DefectClassificationValidator
             return auxComponent.Value switch
             {
                 AuxiliaryComponent.Hub => Enum.GetValues<HubDefectType>().Cast<int>(),
-                AuxiliaryComponent.Nozzle => Enum.GetValues<NozzleDefectType>().Cast<int>(),
+                AuxiliaryComponent.Nozzle => Enum.GetValues<NacelleDefectType>().Cast<int>(),
                 AuxiliaryComponent.VortexGenerators => Enum.GetValues<VortexGeneratorDefectType>().Cast<int>(),
                 AuxiliaryComponent.Serrations => Enum.GetValues<SerrationDefectType>().Cast<int>(),
                 AuxiliaryComponent.RainCollar => Enum.GetValues<RainCollarDefectType>().Cast<int>(),
@@ -309,6 +293,7 @@ public class DefectClassificationValidator
                 AuxiliaryComponent.GurneyFlaps => Enum.GetValues<GurneyFlapDefectType>().Cast<int>(),
                 AuxiliaryComponent.Spoiler => Enum.GetValues<SpoilerDefectType>().Cast<int>(),
                 AuxiliaryComponent.TipBrakeSystem => Enum.GetValues<TipBrakeSystemDefectType>().Cast<int>(),
+                AuxiliaryComponent.DrainageSystem => Enum.GetValues<DrainageSystemDefectType>().Cast<int>(),
                 _ => Enumerable.Empty<int>()
             };
         }

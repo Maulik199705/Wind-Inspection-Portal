@@ -296,7 +296,8 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                                                 {
                                                     case SurfaceDiscolorationSubtype.Mechanical:
                                                     case SurfaceDiscolorationSubtype.Scorch:
-                                                    case SurfaceDiscolorationSubtype.IceContamination:
+                                                    case SurfaceDiscolorationSubtype.IceCondensation:
+                                                    case SurfaceDiscolorationSubtype.Dirt:
                                                         break;
                                                     default:
                                                         anomaly.Classification.DefectSubtype = null;
@@ -309,26 +310,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                                             }
                                             break;
 
-                                        case SurfaceDefectType.Erosion:
-                                            if (!anomaly.Classification.DefectSubtype.HasValue)
-                                                anomaly.Classification.DefectSubtype = (int?)SurfaceErosionSubtype.Chip;
-                                            if (anomaly.Classification.DefectSubtype.HasValue)
-                                            {
-                                                switch ((SurfaceErosionSubtype)anomaly.Classification.DefectSubtype.Value)
-                                                {
-                                                    case SurfaceErosionSubtype.Chip:
-                                                    case SurfaceErosionSubtype.Flaking:
-                                                        break;
-                                                    default:
-                                                        anomaly.Classification.DefectSubtype = null;
-                                                        break;
-                                                }
-                                            }
-                                            else
-                                            {
-                                                anomaly.Classification.DefectSubtype = null;
-                                            }
-                                            break;
+                                       
 
                                         default:
                                             anomaly.Classification.DefectSubtype = null;
@@ -386,8 +368,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                                             break;
 
                                         case TopCoatDefectType.Scratch:
-                                        case TopCoatDefectType.Scorch:
-                                            anomaly.Classification.DefectSubtype = (int?)TopCoatCrackSubtype.None;
+                                       
                                             break;
 
                                         default:
@@ -399,24 +380,24 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                                 case BladeMaterial.Laminate:
                                     switch ((LaminateDefectType)anomaly.Classification.DefectType)
                                     {
-                                        case LaminateDefectType.Erosion:
+                                        case LaminateDefectType.Chip:
                                             if (!anomaly.Classification.DefectSubtype.HasValue)
-                                                anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.Lightning;
+                                                anomaly.Classification.DefectSubtype = (int?)LaminateChipSubtype.Lightning;
                                             if (anomaly.Classification.DefectSubtype.HasValue)
                                             {
-                                                switch ((LaminateErosionSubtype)anomaly.Classification.DefectSubtype.Value)
+                                                switch ((LaminateChipSubtype)anomaly.Classification.DefectSubtype.Value)
                                                 {
-                                                    case LaminateErosionSubtype.Chip:
-                                                    case LaminateErosionSubtype.Lightning:
+                                                    case LaminateChipSubtype.None:
+                                                    case LaminateChipSubtype.Lightning:
                                                         break;
                                                     default:
-                                                        anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.None;
+                                                        anomaly.Classification.DefectSubtype = (int?)LaminateChipSubtype.None;
                                                         break;
                                                 }
                                             }
                                             else
                                             {
-                                                anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.None;
+                                                anomaly.Classification.DefectSubtype = (int?)LaminateChipSubtype.None;
                                             }
                                             break;
 
@@ -427,6 +408,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                                             {
                                                 switch ((LaminateDelaminationSubtype)anomaly.Classification.DefectSubtype.Value)
                                                 {
+                                                    case LaminateDelaminationSubtype.None:
                                                     case LaminateDelaminationSubtype.Lightning:
                                                         break;
                                                     default:
@@ -440,9 +422,7 @@ public sealed class PdfReportGenerationService : IReportGenerationService
                                             }
                                             break;
 
-                                        case LaminateDefectType.Scratch:
-                                            anomaly.Classification.DefectSubtype = (int?)LaminateErosionSubtype.None;
-                                            break;
+                                       
 
                                         default:
                                             anomaly.Classification.DefectSubtype = null;
@@ -481,14 +461,14 @@ public sealed class PdfReportGenerationService : IReportGenerationService
 
                                         case StructureDefectType.Delamination:
                                             if (!anomaly.Classification.DefectSubtype.HasValue)
-                                                anomaly.Classification.DefectSubtype = (int?)StructureDelaminationSubtype.Edge;
+                                                anomaly.Classification.DefectSubtype = (int?)StructureDelaminationSubtype.Lightning;
                                             if (anomaly.Classification.DefectSubtype.HasValue)
                                             {
                                                 switch ((StructureDelaminationSubtype)anomaly.Classification.DefectSubtype.Value)
                                                 {
-                                                    case StructureDelaminationSubtype.Edge:
+                                                    case StructureDelaminationSubtype.None:
                                                     case StructureDelaminationSubtype.Lightning:
-                                                    case StructureDelaminationSubtype.NonLightning:
+                                                    case StructureDelaminationSubtype.Surface:
                                                         break;
                                                     default:
                                                         anomaly.Classification.DefectSubtype = null;
@@ -503,7 +483,25 @@ public sealed class PdfReportGenerationService : IReportGenerationService
 
                                         case StructureDefectType.Erosion:
                                         case StructureDefectType.Hole:
-                                            anomaly.Classification.DefectSubtype = (int?)StructureCrackSubtype.Other;
+                                            if (!anomaly.Classification.DefectSubtype.HasValue)
+                                                anomaly.Classification.DefectSubtype = (int?)StructureHoleSubtype.Lightning;
+                                            if (anomaly.Classification.DefectSubtype.HasValue)
+                                            {
+                                                switch ((StructureHoleSubtype)anomaly.Classification.DefectSubtype.Value)
+                                                {
+                                                    case StructureHoleSubtype.Lightning:
+                                                    case StructureHoleSubtype.NonLightning:
+                                                   
+                                                        break;
+                                                    default:
+                                                        anomaly.Classification.DefectSubtype = null;
+                                                        break;
+                                                }
+                                            }
+                                            else
+                                            {
+                                                anomaly.Classification.DefectSubtype = null;
+                                            }
                                             break;
 
                                         default:

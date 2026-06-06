@@ -69,7 +69,7 @@ public class DefectClassification
             return AuxiliaryComponentType.Value switch
             {
                 Enums.AuxiliaryComponent.Hub => ((HubDefectType)DefectType).ToString(),
-                Enums.AuxiliaryComponent.Nozzle => ((NozzleDefectType)DefectType).ToString(),
+                Enums.AuxiliaryComponent.Nozzle => ((NacelleDefectType)DefectType).ToString(),
                 Enums.AuxiliaryComponent.VortexGenerators => ((VortexGeneratorDefectType)DefectType).ToString(),
                 Enums.AuxiliaryComponent.Serrations => ((SerrationDefectType)DefectType).ToString(),
                 Enums.AuxiliaryComponent.RainCollar => ((RainCollarDefectType)DefectType).ToString(),
@@ -79,6 +79,7 @@ public class DefectClassification
                 Enums.AuxiliaryComponent.GurneyFlaps => ((GurneyFlapDefectType)DefectType).ToString(),
                 Enums.AuxiliaryComponent.Spoiler => ((SpoilerDefectType)DefectType).ToString(),
                 Enums.AuxiliaryComponent.TipBrakeSystem => ((TipBrakeSystemDefectType)DefectType).ToString(),
+                Enums.AuxiliaryComponent.DrainageSystem => ((DrainageSystemDefectType)DefectType).ToString(),
                 _ => "Other"
             };
         }
@@ -100,20 +101,21 @@ public class DefectClassification
             {
                 Enums.BladeMaterial.Surface when DefectType == (int)SurfaceDefectType.Discoloration
                     => ((SurfaceDiscolorationSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Surface when DefectType == (int)SurfaceDefectType.Erosion
-                    => ((SurfaceErosionSubtype)DefectSubtype.Value).ToString(),
+                
                 Enums.BladeMaterial.TopCoat when DefectType == (int)TopCoatDefectType.Crack
                     => ((TopCoatCrackSubtype)DefectSubtype.Value).ToString(),
                 Enums.BladeMaterial.TopCoat when DefectType == (int)TopCoatDefectType.Pinholes
                     => ((TopCoatPinholesSubtype)DefectSubtype.Value).ToString(),
-                Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Erosion
-                    => ((LaminateErosionSubtype)DefectSubtype.Value).ToString(),
+                Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Chip
+                    => ((LaminateChipSubtype)DefectSubtype.Value).ToString(),
                 Enums.BladeMaterial.Laminate when DefectType == (int)LaminateDefectType.Delamination
                     => ((LaminateDelaminationSubtype)DefectSubtype.Value).ToString(),
                 Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Crack
                     => ((StructureCrackSubtype)DefectSubtype.Value).ToString(),
                 Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Delamination
                     => ((StructureDelaminationSubtype)DefectSubtype.Value).ToString(),
+                Enums.BladeMaterial.Structure when DefectType == (int)StructureDefectType.Hole
+                                   => ((StructureHoleSubtype)DefectSubtype.Value).ToString(),
                 Enums.BladeMaterial.Through when DefectType == (int)ThroughDefectType.Bondline
                     => ((ThroughBondlineSubtype)DefectSubtype.Value).ToString(),
                 _ => null
